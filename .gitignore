@@ -1,0 +1,45 @@
+# Environment variables — NEVER commit these
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+
+# Dependencies
+node_modules/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Test coverage
+coverage/
+
+# Firebase Admin SDK credential files — belongs on server via env vars only
+*firebase-adminsdk*.json
+
+# Python venv
+.venv/
+
+# Misc
+*.pem
+*.key
+*.p12
+*.code-workspace
+network.txt

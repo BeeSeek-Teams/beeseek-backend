@@ -1,0 +1,13 @@
+FROM postgres:18-alpine
+
+# Install PostGIS (Alpine postgis package is built for PG18)
+RUN apk add --no-cache postgis \
+ # Copy extension SQL + control files to Docker PG's extension dir
+ && cp /usr/share/postgresql/extension/postgis* /usr/local/share/postgresql/extension/ \
+ && cp /usr/share/postgresql/extension/address_standardizer* /usr/local/share/postgresql/extension/ \
+ && cp /usr/share/postgresql/extension/postgis_tiger_geocoder* /usr/local/share/postgresql/extension/ 2>/dev/null || true \
+ && cp /usr/share/postgresql/extension/postgis_topology* /usr/local/share/postgresql/extension/ 2>/dev/null || true \
+ # Copy shared libraries
+ && cp /usr/lib/postgresql18/postgis*.so /usr/local/lib/postgresql/ 2>/dev/null || true \
+ && cp /usr/lib/postgresql18/address_standardizer*.so /usr/local/lib/postgresql/ 2>/dev/null || true \
+ && cp /usr/lib/postgresql18/postgis_topology*.so /usr/local/lib/postgresql/ 2>/dev/null || true
