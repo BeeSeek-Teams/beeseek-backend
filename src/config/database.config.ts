@@ -40,8 +40,8 @@ export const databaseConfig: TypeOrmModuleOptions = {
   ssl: urlConfig?.ssl || false,
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
-  // Auto-sync entities in development only — NEVER in production (schema drift risk).
-  synchronize: process.env.NODE_ENV !== 'production',
+  // Auto-sync entities in development, or when DB_SYNCHRONIZE=true (for initial production deploy).
+  synchronize: process.env.DB_SYNCHRONIZE === 'true' || process.env.NODE_ENV !== 'production',
   // Only log SQL in non-production environments to avoid I/O overhead & data leakage in logs.
   logging: process.env.NODE_ENV !== 'production',
   dropSchema: false,
