@@ -19,9 +19,12 @@ export class PulseMetricsService implements OnModuleInit {
   private readonly LATENCY_KEY = 'pulse:latency:history';
   private readonly UPTIME_KEY = 'pulse:uptime:daily';
   private readonly CHECKS_KEY = 'pulse:uptime:checks';
+  private readonly RESOURCE_KEY = 'pulse:resources:history';
   private readonly META_KEY = 'pulse:meta';
   private readonly RETENTION_24H = 86_400; // seconds
   private readonly RETENTION_90D = 90; // days
+  private lastCpuUsage = process.cpuUsage();
+  private lastCpuTime = Date.now();
 
   constructor(
     private readonly redis: RedisService,
@@ -99,6 +102,27 @@ export class PulseMetricsService implements OnModuleInit {
         await client.hDel(this.CHECKS_KEY, day);
       }
     }
+
+    // 7) Collect CPU + memory snapshot and store in sorted set
+    const cpuNow = process.cpuUsage(this.lastCpuUsage);
+    const elapsed = (Date.now() - this.lastCpuTime) * 1000; // microseconds
+    const cpuPercent = elapsed > 0
+      ? Math.min(100, Math.round(((cpuNow.user + cpuNow.system) / elapsed) * 100 * 10) / 10)
+      : 0;
+    this.lastCpuUsage = process.cpuUsage();
+    this.lastCpuTime = Date.now();
+
+    const mem = process.memoryUsage();
+    const resourceEntry = JSON.stringify({
+      ts: now,
+      cpuPercent,
+      rssBytes: mem.rss,
+      heapUsedBytes: mem.heapUsed,
+      heapTotalBytes: mem.heapTotal,
+      externalBytes: mem.external,
+    });
+    await client.zAdd(this.RESOURCE_KEY, { score: now, value: resourceEntry });
+    await client.zRemRangeByScore(this.RESOURCE_KEY, 0, cutoff);
 
     await this.redis.hSet(this.META_KEY, 'lastCheck', new Date().toISOString());
   }
@@ -193,11 +217,53 @@ export class PulseMetricsService implements OnModuleInit {
     return result;
   }
 
+  /** Resource usage time-series (CPU, memory) — last N hours */
+  async getResourceHistory(hours = 24, points = 96): Promise<{
+    ts: number;
+    cpuPercent: number;
+    rssMB: number;
+    heapUsedMB: number;
+    heapTotalMB: number;
+    externalMB: number;
+  }[]> {
+    const client = this.redis.getClient();
+    const cutoff = Date.now() - hours * 3600 * 1000;
+    const raw = await client.zRangeByScore(this.RESOURCE_KEY, cutoff, '+inf');
+    const parsed = raw.map((r) => {
+      const e = JSON.parse(r);
+      return {
+        ts: e.ts,
+        cpuPercent: e.cpuPercent,
+        rssMB: Math.round((e.rssBytes / 1024 / 1024) * 10) / 10,
+        heapUsedMB: Math.round((e.heapUsedBytes / 1024 / 1024) * 10) / 10,
+        heapTotalMB: Math.round((e.heapTotalBytes / 1024 / 1024) * 10) / 10,
+        externalMB: Math.round((e.externalBytes / 1024 / 1024) * 10) / 10,
+      };
+    });
+
+    if (parsed.length <= points) return parsed;
+    const step = Math.ceil(parsed.length / points);
+    const sampled: typeof parsed = [];
+    for (let i = 0; i < parsed.length; i += step) {
+      const slice = parsed.slice(i, i + step);
+      const n = slice.length;
+      sampled.push({
+        ts: slice[Math.floor(n / 2)].ts,
+        cpuPercent: Math.round(slice.reduce((s, e) => s + e.cpuPercent, 0) / n * 10) / 10,
+        rssMB: Math.round(slice.reduce((s, e) => s + e.rssMB, 0) / n * 10) / 10,
+        heapUsedMB: Math.round(slice.reduce((s, e) => s + e.heapUsedMB, 0) / n * 10) / 10,
+        heapTotalMB: Math.round(slice.reduce((s, e) => s + e.heapTotalMB, 0) / n * 10) / 10,
+        externalMB: Math.round(slice.reduce((s, e) => s + e.externalMB, 0) / n * 10) / 10,
+      });
+    }
+    return sampled;
+  }
+
   /** DB / Redis specific metrics */
   async getInfraMetrics(): Promise<{
     database: { latency: number; status: string };
     redis: { latency: number; status: string; memoryUsed: string };
-    process: { uptimeSeconds: number; memoryMB: number };
+    process: { uptimeSeconds: number; memoryMB: number; cpuPercent: number };
   }> {
     // DB latency
     let dbLatency = -1;
@@ -220,12 +286,18 @@ export class PulseMetricsService implements OnModuleInit {
     } catch { /* noop */ }
 
     const mem = process.memoryUsage();
+    const cpuNow = process.cpuUsage();
+    const elapsed = (Date.now() - this.lastCpuTime) * 1000;
+    const cpuPercent = elapsed > 0
+      ? Math.min(100, Math.round(((cpuNow.user + cpuNow.system) / elapsed) * 100 * 10) / 10)
+      : 0;
     return {
       database: { latency: dbLatency, status: dbLatency >= 0 ? 'up' : 'down' },
       redis: { latency: redisLatency, status: redisLatency >= 0 ? 'up' : 'down', memoryUsed: redisMemory },
       process: {
         uptimeSeconds: Math.floor(process.uptime()),
         memoryMB: Math.round(mem.heapUsed / 1024 / 1024),
+        cpuPercent,
       },
     };
   }

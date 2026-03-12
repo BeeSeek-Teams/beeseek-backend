@@ -125,6 +125,18 @@ export class StatusEventsController {
     return this.pulseMetrics.getInfraMetrics();
   }
 
+  // ─── Resource usage history (CPU, memory charts) ──────────────
+
+  @Get('resource-history')
+  async getResourceHistory(
+    @Query('hours') hours?: string,
+    @Query('points') points?: string,
+  ) {
+    const h = hours ? parseInt(hours, 10) : 24;
+    const p = points ? parseInt(points, 10) : 96;
+    return this.pulseMetrics.getResourceHistory(Math.min(h, 168), Math.min(p, 500));
+  }
+
   // ─── Maintenance windows ──────────────────────────────────────
 
   @Get('maintenance')
