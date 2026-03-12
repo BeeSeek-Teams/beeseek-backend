@@ -28,11 +28,10 @@ async function bootstrap() {
     'https://www.beeseek.site',
     'https://admin.beeseek.site',
     'https://pulse.beeseek.site',
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:3002',
   ];
-  // In development also allow localhost origins
-  if (process.env.NODE_ENV !== 'production') {
-    allowedOrigins.push('http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002');
-  }
   app.enableCors({
     origin: (origin, callback) => {
       // Allow requests with no origin (mobile apps, Postman, server-to-server)
