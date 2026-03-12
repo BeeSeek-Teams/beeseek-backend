@@ -36,6 +36,7 @@ export class HealthController {
         options: {
           host: redisConfig.host,
           port: redisConfig.port,
+          ...(redisConfig.password ? { password: redisConfig.password } : {}),
         },
       }),
       // Check Cloudinary API
