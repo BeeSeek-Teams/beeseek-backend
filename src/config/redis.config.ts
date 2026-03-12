@@ -17,10 +17,20 @@ function parseRedisUrl() {
 
 const urlConfig = parseRedisUrl();
 
+const host = urlConfig.host || process.env.REDIS_HOST || 'localhost';
+const port = urlConfig.port || parseInt(process.env.REDIS_PORT || '6379');
+const password = urlConfig.password || process.env.REDIS_PASSWORD || undefined;
+
+// Build a full Redis URL with auth if password is present, or use REDIS_URL directly
+export const redisUrl: string =
+  process.env.REDIS_URL || (password
+    ? `redis://:${encodeURIComponent(password)}@${host}:${port}`
+    : `redis://${host}:${port}`);
+
 export const redisConfig = {
-  host: urlConfig.host || process.env.REDIS_HOST || 'localhost',
-  port: urlConfig.port || parseInt(process.env.REDIS_PORT || '6379'),
-  password: urlConfig.password || process.env.REDIS_PASSWORD || undefined,
+  host,
+  port,
+  password,
   db: 0,
   retryStrategy: (times: number) => {
     const delay = Math.min(times * 50, 2000);

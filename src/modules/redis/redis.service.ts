@@ -5,7 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { createClient, RedisClientType } from 'redis';
-import { redisConfig } from '../../config/redis.config';
+import { redisUrl, redisConfig } from '../../config/redis.config';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
@@ -14,7 +14,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   constructor() {
     this.client = createClient({
-      url: `redis://${redisConfig.host}:${redisConfig.port}`,
+      url: redisUrl,
       database: redisConfig.db,
     });
 
