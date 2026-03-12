@@ -28,6 +28,7 @@ async function bootstrap() {
     'https://www.beeseek.site',
     'https://admin.beeseek.site',
     'https://pulse.beeseek.site',
+    'https://beeseek-admin.vercel.app',
     'http://localhost:3000',
     'http://localhost:3001',
     'http://localhost:3002',
