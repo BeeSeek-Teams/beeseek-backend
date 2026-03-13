@@ -219,6 +219,7 @@ export class MonnifyService {
 
   /**
    * Verify NIN with Monnify (Detailed)
+   * NOTE: Monnify Verification APIs only work in LIVE mode, not sandbox.
    */
   async verifyNIN(ninNumber: string): Promise<{
     verified: boolean;
@@ -226,7 +227,14 @@ export class MonnifyService {
     firstName?: string;
     lastName?: string;
     dateOfBirth?: string;
+    error?: string;
   }> {
+    // Monnify verification endpoints are live-only
+    if (process.env.MONNIFY_SANDBOX_MODE === 'true') {
+      this.logger.warn('NIN verification skipped — Monnify sandbox does not support Verification APIs. Set MONNIFY_SANDBOX_MODE=false for live.');
+      return { verified: false, error: 'NIN verification is not available in sandbox mode' };
+    }
+
     try {
       const token = await this.getValidToken();
 
@@ -258,13 +266,16 @@ export class MonnifyService {
         };
       }
 
-      return { verified: false };
-    } catch (error) {
-      this.logger.warn(`NIN verification failed for ${ninNumber}`, {
-        message: error.message,
-        data: error.response?.data
+      this.logger.warn(`NIN verification returned unsuccessful for ${ninNumber}`, {
+        message: response.data.responseMessage,
+        code: response.data.responseCode,
       });
-      return { verified: false };
+      return { verified: false, error: response.data.responseMessage };
+    } catch (error) {
+      const status = error.response?.status;
+      const monnifyMsg = error.response?.data?.responseMessage || error.message;
+      this.logger.warn(`NIN verification failed for ${ninNumber} — HTTP ${status}: ${monnifyMsg}`);
+      return { verified: false, error: monnifyMsg };
     }
   }
 
