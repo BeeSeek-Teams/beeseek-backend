@@ -674,14 +674,22 @@ export class AuthService {
     // Clear attempt counter on success
     await this.redisService.set(attemptKey, '0', 1);
 
-    // Update user status
+    // Use targeted update() instead of save() on partial entity to avoid
+    // TypeORM overwriting non-selected columns with null/undefined.
     if (isVerifyMatch) {
-      user.isVerified = true;
-      user.emailVerificationOTP = null;
-      user.emailVerificationOTPExpires = null;
+      await this.usersRepository.update(user.id, {
+        isVerified: true,
+        emailVerificationOTP: null,
+        emailVerificationOTPExpires: null,
+      });
+      this.logger.log(`User ${user.id} email verified successfully — isVerified set to true`);
     }
 
-    await this.usersRepository.save(user);
+    if (isResetMatch) {
+      // Don't clear reset OTP here — it's needed for the actual password reset step.
+      // Just validate it.
+      this.logger.log(`User ${user.id} reset OTP verified successfully`);
+    }
 
     return { valid: true };
   }
@@ -709,12 +717,16 @@ export class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(resetPasswordDto.password, 12);
-    user.hashedPassword = hashedPassword;
-    user.resetPasswordOTP = null;
-    user.resetPasswordOTPExpires = null;
-    user.isVerified = true;
 
-    await this.usersRepository.save(user);
+    // Use targeted update() instead of save() on partial entity
+    await this.usersRepository.update(user.id, {
+      hashedPassword,
+      resetPasswordOTP: null,
+      resetPasswordOTPExpires: null,
+      isVerified: true,
+    });
+
+    this.logger.log(`User ${user.id} password reset successfully — isVerified set to true`);
 
     return { message: 'Password reset successful' };
   }
