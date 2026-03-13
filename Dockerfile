@@ -44,6 +44,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 
+# Remove crashpad handler that causes "chrome_crashpad_handler: --database is required" errors
+# in containerised environments — crash reporting is not needed in production containers
+RUN rm -f /usr/lib/chromium/chrome_crashpad_handler 2>/dev/null || true
+
 # Security: run as non-root
 RUN groupadd -r appgroup && useradd -r -g appgroup -G audio,video appuser
 

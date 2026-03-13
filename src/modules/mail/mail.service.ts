@@ -1,46 +1,46 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
 @Injectable()
 export class MailService implements OnModuleInit {
-  private transporter: nodemailer.Transporter;
+  private resend: Resend;
   private readonly logger = new Logger(MailService.name);
+  private readonly fromAddress: string;
 
   constructor(private configService: ConfigService) {
-    // smtp.hostinger.com resolves to Cloudflare IPs which do NOT proxy SMTP traffic.
-    // smtp.titan.email is Hostinger's actual Titan email SMTP server (AWS-hosted, directly reachable).
-    const host = this.configService.get('SMTP_HOST', 'smtp.titan.email');
-    const port = Number(this.configService.get('SMTP_PORT', 587));
-    const user = this.configService.get('EMAIL_USER', 'no-reply@beeseek.site');
-    const pass = this.configService.get<string>('EMAIL_PASS');
-    const secure = port === 465;
-
-    this.logger.log(
-      `MailService config: host=${host}, port=${port}, secure=${secure}, user=${user}, pass=${pass ? '***SET***' : '!!!MISSING!!!'}`,
+    const apiKey = this.configService.get<string>('RESEND_API_KEY', '');
+    this.fromAddress = this.configService.get(
+      'FROM_EMAIL',
+      this.configService.get('EMAIL_USER', 'no-reply@beeseek.site'),
     );
 
-    this.transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      auth: { user, pass },
-      tls: {
-        rejectUnauthorized: false,
-        minVersion: 'TLSv1.2',
-      },
-      connectionTimeout: 15000,
-      greetingTimeout: 15000,
-      socketTimeout: 20000,
-    });
+    this.resend = new Resend(apiKey);
+
+    this.logger.log(
+      `MailService config: provider=Resend (HTTP API), from=${this.fromAddress}, apiKey=${apiKey ? '***SET***' : '!!!MISSING!!!'}`,
+    );
   }
 
   async onModuleInit() {
-    this.transporter.verify().then(() => {
-      this.logger.log('SMTP connection verified successfully');
-    }).catch((err: any) => {
-      this.logger.error('SMTP connection verification FAILED:', err.message);
-    });
+    // Verify Resend is configured by sending a test API call
+    try {
+      const apiKey = this.configService.get<string>('RESEND_API_KEY', '');
+      if (!apiKey) {
+        this.logger.warn('RESEND_API_KEY is not set — emails will NOT be sent');
+        return;
+      }
+      // Quick connectivity check — list domains (lightweight call)
+      const { data, error } = await this.resend.domains.list();
+      if (error) {
+        this.logger.error(`Resend API verification FAILED: ${error.message}`);
+      } else {
+        const domainNames = data?.data?.map((d: any) => d.name).join(', ') || 'none';
+        this.logger.log(`Resend API connected — verified domains: ${domainNames}`);
+      }
+    } catch (err: any) {
+      this.logger.error(`Resend API verification FAILED: ${err.message}`);
+    }
   }
 
   private readonly commonStyles = `
@@ -273,23 +273,27 @@ export class MailService implements OnModuleInit {
   }
 
   private async sendMail(to: string, subject: string, html: string) {
-    const from = this.configService.get(
-      'FROM_EMAIL',
-      this.configService.get('EMAIL_USER', 'no-reply@beeseek.site'),
-    );
-    this.logger.log(`Attempting to send email to=${to}, subject="${subject}", from=${from}`);
+    this.logger.log(`Attempting to send email to=${to}, subject="${subject}", from=${this.fromAddress}`);
     try {
-      const info = await this.transporter.sendMail({
-        from: `"BeeSeek" <${from}>`,
-        to,
+      const { data, error } = await this.resend.emails.send({
+        from: `BeeSeek <${this.fromAddress}>`,
+        to: [to],
         subject,
         html,
       });
-      this.logger.log(`Email sent successfully: messageId=${info.messageId}, response=${info.response}`);
-      return info;
+
+      if (error) {
+        this.logger.error(
+          `FAILED to send email to ${to}: ${error.message} | name=${error.name}`,
+        );
+        throw new Error(error.message);
+      }
+
+      this.logger.log(`Email sent successfully: id=${data?.id}`);
+      return data;
     } catch (error: any) {
       this.logger.error(
-        `FAILED to send email to ${to}: ${error.message} | code=${error.code} | command=${error.command} | responseCode=${error.responseCode}`,
+        `FAILED to send email to ${to}: ${error.message}`,
       );
       throw error;
     }
