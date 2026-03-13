@@ -69,6 +69,13 @@ export class UsersController {
     return this.usersService.runBackgroundCheck(id);
   }
 
+  @Post('verifications/:id/repair-wallet')
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Roles(AdminRole.ADMIN, AdminRole.SUPER_ADMIN)
+  async repairWallet(@Param('id') id: string) {
+    return this.usersService.repairWallet(id);
+  }
+
   @Get('list/all')
   @UseGuards(JwtAuthGuard, AdminGuard)
   @Roles(AdminRole.ADMIN, AdminRole.SUPER_ADMIN)

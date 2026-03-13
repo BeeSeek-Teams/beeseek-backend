@@ -193,6 +193,50 @@ export class MonnifyService {
   }
 
   /**
+   * Retrieve an existing reserved account from Monnify by its accountReference.
+   * Useful for backfilling NUBAN data that was lost or never persisted.
+   */
+  async getReservedAccountDetails(accountReference: string): Promise<{
+    nuban: string;
+    accountName: string;
+    bankName: string;
+    bankCode: string;
+  } | null> {
+    try {
+      const token = await this.getValidToken();
+
+      const response = await this.axiosInstance.get<MonnifyReservedAccountResponse>(
+        `/api/v2/bank-transfer/reserved-accounts/${accountReference}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+
+      const body = response.data.responseBody;
+      const account = body?.accounts?.[0];
+
+      if (!account?.accountNumber) {
+        this.logger.warn(
+          `No account number found for reference ${accountReference}. Response: ${JSON.stringify(body)}`,
+        );
+        return null;
+      }
+
+      return {
+        nuban: account.accountNumber,
+        accountName: account.accountName || body?.accountName || '',
+        bankName: account.bankName || '',
+        bankCode: account.bankCode || '',
+      };
+    } catch (error) {
+      this.logger.error(
+        `Failed to retrieve reserved account ${accountReference}: ${error.message}`,
+      );
+      return null;
+    }
+  }
+
+  /**
    * Get account balance
    */
   async getAccountBalance(accountReference: string): Promise<number> {

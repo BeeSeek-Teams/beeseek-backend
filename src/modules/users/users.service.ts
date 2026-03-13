@@ -314,17 +314,31 @@ export class UsersService {
       }
 
       // Safety net: if the user has no NUBAN (e.g. old bug where accounts[0] wasn't read),
-      // re-create the reserved account now so wallet funding works immediately.
+      // try to retrieve from Monnify first, then re-create if needed.
       if (!user.monnifyNUBAN && user.ninNumber) {
         try {
-          this.logger.log(`[Approval] User ${user.id} has no NUBAN — creating reserved account now`);
-          const wallet = await this.monnifyService.createReservedAccount(user, user.ninNumber);
-          updateData.monnifyNUBAN = wallet.nuban;
-          updateData.monnifyAccountId = wallet.accountId;
-          updateData.monnifyBankName = wallet.bankName;
-          this.logger.log(`[Approval] Reserved account created: ${wallet.bankName} — ${wallet.nuban}`);
+          // First, try to retrieve the existing reserved account from Monnify
+          if (user.monnifyAccountId) {
+            this.logger.log(`[Approval] User ${user.id} has accountId but no NUBAN — retrieving from Monnify`);
+            const existing = await this.monnifyService.getReservedAccountDetails(user.monnifyAccountId);
+            if (existing?.nuban) {
+              updateData.monnifyNUBAN = existing.nuban;
+              updateData.monnifyBankName = existing.bankName;
+              this.logger.log(`[Approval] Retrieved existing account: ${existing.bankName} — ${existing.nuban}`);
+            }
+          }
+
+          // If still no NUBAN, create a new reserved account
+          if (!updateData.monnifyNUBAN) {
+            this.logger.log(`[Approval] User ${user.id} has no NUBAN — creating reserved account now`);
+            const wallet = await this.monnifyService.createReservedAccount(user, user.ninNumber);
+            updateData.monnifyNUBAN = wallet.nuban;
+            updateData.monnifyAccountId = wallet.accountId;
+            updateData.monnifyBankName = wallet.bankName;
+            this.logger.log(`[Approval] Reserved account created: ${wallet.bankName} — ${wallet.nuban}`);
+          }
         } catch (err) {
-          this.logger.error(`[Approval] Failed to create reserved account for user ${user.id}: ${err.message}`);
+          this.logger.error(`[Approval] Failed to resolve reserved account for user ${user.id}: ${err.message}`);
           // Don't block approval — admin explicitly approved, account can be retried
         }
       }
@@ -383,6 +397,63 @@ export class UsersService {
       matches: bgCheck.matches,
       reportId: bgCheck.reportId,
       error: bgCheck.error,
+    };
+  }
+
+  /**
+   * Repair wallet for users who have monnifyAccountId but missing NUBAN.
+   * Retrieves from Monnify if account exists, or creates a new one.
+   */
+  async repairWallet(userId: string) {
+    const user = await this.usersRepository.findOne({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found');
+
+    if (user.monnifyNUBAN) {
+      return {
+        success: true,
+        message: 'Wallet already has NUBAN',
+        nuban: user.monnifyNUBAN,
+        bankName: user.monnifyBankName,
+      };
+    }
+
+    // Try to retrieve existing reserved account from Monnify
+    if (user.monnifyAccountId) {
+      this.logger.log(`[RepairWallet] Retrieving account for user ${user.id}, ref: ${user.monnifyAccountId}`);
+      const existing = await this.monnifyService.getReservedAccountDetails(user.monnifyAccountId);
+      if (existing?.nuban) {
+        await this.usersRepository.update(userId, {
+          monnifyNUBAN: existing.nuban,
+          monnifyBankName: existing.bankName,
+        });
+        this.logger.log(`[RepairWallet] Updated user ${user.id}: ${existing.bankName} — ${existing.nuban}`);
+        return {
+          success: true,
+          message: 'Retrieved and updated from Monnify',
+          nuban: existing.nuban,
+          bankName: existing.bankName,
+        };
+      }
+    }
+
+    // No existing account found — create a new one
+    if (!user.ninNumber) {
+      throw new BadRequestException('User has no NIN — cannot create reserved account');
+    }
+
+    this.logger.log(`[RepairWallet] Creating new reserved account for user ${user.id}`);
+    const wallet = await this.monnifyService.createReservedAccount(user, user.ninNumber);
+    await this.usersRepository.update(userId, {
+      monnifyNUBAN: wallet.nuban,
+      monnifyAccountId: wallet.accountId,
+      monnifyBankName: wallet.bankName,
+    });
+
+    return {
+      success: true,
+      message: 'Created new reserved account',
+      nuban: wallet.nuban,
+      bankName: wallet.bankName,
     };
   }
 
