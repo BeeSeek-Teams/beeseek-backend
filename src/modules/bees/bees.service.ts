@@ -266,9 +266,6 @@ export class BeesService {
         (LEAST(bee.jobsCompleted / 30.0, 1.0)) + -- Experience bonus (capped at 1pt)
         (CASE 
             WHEN :searchQuery::text IS NOT NULL THEN (
-                (similarity(bee.title, :searchQuery::text) * 7.0) + 
-                (similarity(bee.category, :searchQuery::text) * 5.0) +
-                (CASE WHEN bee.description ILIKE :searchLike::text THEN 1.0 ELSE 0 END)
             )
             ELSE 0 
         END)
