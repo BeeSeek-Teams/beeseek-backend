@@ -62,6 +62,13 @@ export class UsersController {
     return this.usersService.updateNinStatus(id, body.status, body.registryName);
   }
 
+  @Post('verifications/:id/background-check')
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Roles(AdminRole.MODERATOR, AdminRole.ADMIN, AdminRole.SUPER_ADMIN)
+  async runBackgroundCheck(@Param('id') id: string) {
+    return this.usersService.runBackgroundCheck(id);
+  }
+
   @Get('list/all')
   @UseGuards(JwtAuthGuard, AdminGuard)
   @Roles(AdminRole.ADMIN, AdminRole.SUPER_ADMIN)

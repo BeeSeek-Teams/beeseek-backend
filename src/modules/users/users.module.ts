@@ -10,6 +10,7 @@ import { Review } from '../../entities/review.entity';
 import { Transaction } from '../../entities/transaction.entity';
 import { Notification } from '../../entities/notification.entity';
 import { MailModule } from '../mail/mail.module';
+import { BackgroundCheckService } from '../../common/services/background-check.service';
 
 @Module({
   imports: [
@@ -17,7 +18,7 @@ import { MailModule } from '../mail/mail.module';
     MailModule,
   ],
   controllers: [UsersController],
-  providers: [UsersService],
+  providers: [UsersService, BackgroundCheckService],
   exports: [UsersService],
 })
 export class UsersModule {}

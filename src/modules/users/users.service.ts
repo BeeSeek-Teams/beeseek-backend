@@ -9,6 +9,7 @@ import { Review } from '../../entities/review.entity';
 import { Transaction } from '../../entities/transaction.entity';
 import { Notification } from '../../entities/notification.entity';
 import { MailService } from '../mail/mail.service';
+import { BackgroundCheckService } from '../../common/services/background-check.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import * as bcrypt from 'bcrypt';
 import { UpdateProfileDto } from '../../dto/update-profile.dto';
@@ -33,6 +34,7 @@ export class UsersService {
     @InjectRepository(Notification)
     private notificationsRepository: Repository<Notification>,
     private mailService: MailService,
+    private backgroundCheckService: BackgroundCheckService,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
@@ -262,10 +264,52 @@ export class UsersService {
     if (!user) throw new BadRequestException('User not found');
 
     const updateData: any = { ninStatus: status };
+
     if (status === NinStatus.VERIFIED) {
+      // Run AML / criminal screening via Youverify before approving
+      const bgCheck = await this.backgroundCheckService.screenIndividual(
+        user.firstName,
+        user.lastName,
+      );
+      updateData.ninBackgroundCheck = {
+        provider: 'youverify',
+        success: bgCheck.success,
+        riskLevel: bgCheck.riskLevel,
+        isPEP: bgCheck.isPEP,
+        isSanctioned: bgCheck.isSanctioned,
+        isWatchlisted: bgCheck.isWatchlisted,
+        totalMatches: bgCheck.totalMatches,
+        matches: bgCheck.matches,
+        reportId: bgCheck.reportId,
+        checkedAt: new Date().toISOString(),
+        error: bgCheck.error,
+      };
+
+      if (bgCheck.success) {
+        this.logger.log(
+          `[BackgroundCheck] User ${user.id}: risk=${bgCheck.riskLevel}, ` +
+          `PEP=${bgCheck.isPEP}, sanctions=${bgCheck.isSanctioned}, ` +
+          `matches=${bgCheck.totalMatches}`,
+        );
+
+        if (bgCheck.riskLevel === 'high') {
+          this.logger.warn(
+            `[BackgroundCheck] HIGH RISK for user ${user.id} (${user.firstName} ${user.lastName}): ` +
+            `PEP=${bgCheck.isPEP}, sanctioned=${bgCheck.isSanctioned}, matches=${bgCheck.totalMatches}`,
+          );
+          // Still approve — admin made the decision, but the data is stored for audit
+        }
+      } else {
+        this.logger.warn(
+          `[BackgroundCheck] Screening failed for user ${user.id}: ${bgCheck.error}`,
+        );
+      }
+
       updateData.isNinVerified = true;
       updateData.ninVerifiedAt = new Date();
-      if (registryName) updateData.ninRegistryName = registryName;
+      if (registryName && !updateData.ninRegistryName) {
+        updateData.ninRegistryName = registryName;
+      }
     } else if (status === NinStatus.REJECTED) {
       updateData.isNinVerified = false;
     }
@@ -279,7 +323,49 @@ export class UsersService {
       await this.mailService.sendVerificationRejected(user.email, user.firstName);
     }
 
-    return { success: true, status };
+    return { success: true, status, backgroundCheck: updateData.ninBackgroundCheck };
+  }
+
+  /**
+   * Run AML / criminal screening without changing status — admin can preview results.
+   */
+  async runBackgroundCheck(userId: string) {
+    const user = await this.usersRepository.findOne({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found');
+
+    const bgCheck = await this.backgroundCheckService.screenIndividual(
+      user.firstName,
+      user.lastName,
+    );
+
+    // Persist the check results for audit
+    await this.usersRepository.update(userId, {
+      ninBackgroundCheck: {
+        provider: 'youverify',
+        success: bgCheck.success,
+        riskLevel: bgCheck.riskLevel,
+        isPEP: bgCheck.isPEP,
+        isSanctioned: bgCheck.isSanctioned,
+        isWatchlisted: bgCheck.isWatchlisted,
+        totalMatches: bgCheck.totalMatches,
+        matches: bgCheck.matches,
+        reportId: bgCheck.reportId,
+        checkedAt: new Date().toISOString(),
+        error: bgCheck.error,
+      },
+    });
+
+    return {
+      success: bgCheck.success,
+      riskLevel: bgCheck.riskLevel,
+      isPEP: bgCheck.isPEP,
+      isSanctioned: bgCheck.isSanctioned,
+      isWatchlisted: bgCheck.isWatchlisted,
+      totalMatches: bgCheck.totalMatches,
+      matches: bgCheck.matches,
+      reportId: bgCheck.reportId,
+      error: bgCheck.error,
+    };
   }
 
   /**

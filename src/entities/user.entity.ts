@@ -95,6 +95,12 @@ export class User {
   @Column({ name: 'nin_registry_name', type: 'varchar', nullable: true })
   ninRegistryName: string | null;
 
+  @Column({ name: 'nin_background_check', type: 'jsonb', nullable: true })
+  ninBackgroundCheck: Record<string, any> | null;
+
+  @Column({ name: 'nin_name_match_confidence', type: 'int', nullable: true })
+  ninNameMatchConfidence: number | null;
+
   @Column({ type: 'varchar', nullable: true, select: false })
   resetPasswordOTP: string | null;
 
