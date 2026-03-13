@@ -145,12 +145,15 @@ export class MonnifyService {
         accountId: body?.accountReference || '',
       };
     } catch (error) {
+      const status = error.response?.status;
+      const monnifyMsg = error.response?.data?.responseMessage || error.message;
+      const monnifyCode = error.response?.data?.responseCode;
       this.logger.error(
-        `Failed to create reserved account for user ${user.id}`,
-        error,
+        `Failed to create reserved account for user ${user.id} — HTTP ${status}: ${monnifyMsg} (code: ${monnifyCode})`,
       );
+      this.logger.error(`Monnify full response: ${JSON.stringify(error.response?.data)}`);
       throw new HttpException(
-        'Unable to create wallet account. Please try again later.',
+        `Unable to create wallet account: ${monnifyMsg}`,
         HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
