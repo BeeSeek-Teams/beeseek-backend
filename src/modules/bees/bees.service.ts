@@ -268,8 +268,6 @@ export class BeesService {
             WHEN :searchQuery::text IS NOT NULL THEN (
                 (similarity(bee.title, :searchQuery::text) * 7.0) + 
                 (similarity(bee.category, :searchQuery::text) * 5.0) +
-                (word_similarity(:searchQuery::text, bee.description) * 2.0) +
-                (word_similarity(:searchQuery::text, bee.clientRequirements) * 1.0) +
                 (CASE WHEN bee.description ILIKE :searchLike::text THEN 1.0 ELSE 0 END)
             )
             ELSE 0 
@@ -279,25 +277,18 @@ export class BeesService {
     query.setParameter('searchQuery', search || null);
     query.setParameter('searchLike', `%${search}%`);
 
-    // Smart Filtering with Fuzzy Matching Support
+    // Smart Filtering with Case-Insensitive Text Search
     if (search) {
-      // 1. ILIKE: Standard substring matching (fast)
-      // 2. % Operator: Trigram similarity for titles/categories (typo tolerance)
-      // 3. <% Operator: Word similarity for descriptions (matches "carpentar" if "carpenter" is in text)
+      // ILIKE: Standard substring matching (case-insensitive)
       query.andWhere(
         `(
           bee.title ILIKE :search OR 
           bee.description ILIKE :search OR 
           bee.category ILIKE :search OR 
-          bee.clientRequirements ILIKE :search OR
-          bee.title % :rawSearch OR
-          bee.category % :rawSearch OR
-          bee.description <% :rawSearch OR
-          bee.clientRequirements <% :rawSearch
+          bee.clientRequirements ILIKE :search
         )`,
         { 
-            search: `%${search}%`, 
-            rawSearch: search 
+            search: `%${search}%`
         }
       );
     }
