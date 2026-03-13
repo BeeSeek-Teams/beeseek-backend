@@ -1,18 +1,28 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger as NestLogger } from '@nestjs/common';
-import { Logger } from 'nestjs-pino';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import compression from 'compression';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/exceptions/all-exceptions.filter';
 import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
+import { PulseLogger } from './modules/health/pulse-logger';
+import { PulseLogBufferService } from './modules/health/pulse-log-buffer.service';
 
 async function bootstrap() {
   const logger = new NestLogger('Main');
 
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
-  app.useLogger(app.get(Logger));
+
+  // Wire up PulseLogger: pushes every log to Redis for the Pulse dashboard
+  try {
+    const logBuffer = app.get(PulseLogBufferService);
+    PulseLogger.setBuffer(logBuffer);
+    app.useLogger(new PulseLogger());
+    logger.log('PulseLogger activated — logs streaming to Redis');
+  } catch {
+    logger.warn('PulseLogBufferService not available, falling back to default logger');
+  }
 
   // Socket.IO Redis adapter for horizontal scaling
   const redisIoAdapter = new RedisIoAdapter(app);

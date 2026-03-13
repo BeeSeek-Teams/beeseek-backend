@@ -3,6 +3,7 @@ import { TerminusModule } from '@nestjs/terminus';
 import { HealthController } from './health.controller';
 import { StatusEventsController } from './status.controller';
 import { PulseMetricsService } from './pulse-metrics.service';
+import { PulseLogBufferService } from './pulse-log-buffer.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { HttpModule } from '@nestjs/axios';
 import { IncidentsModule } from '../incidents/incidents.module';
@@ -17,7 +18,7 @@ import { StatusSubscriber } from '../../entities/status-subscriber.entity';
     IncidentsModule,
   ],
   controllers: [HealthController, StatusEventsController],
-  providers: [PulseMetricsService],
-  exports: [PulseMetricsService],
+  providers: [PulseMetricsService, PulseLogBufferService],
+  exports: [PulseMetricsService, PulseLogBufferService],
 })
 export class HealthModule {}

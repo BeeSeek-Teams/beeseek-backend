@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Body, Param, Header, Res, Query } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Header, Res, Query } from '@nestjs/common';
 import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
 import { IncidentsService } from '../incidents/incidents.service';
 import { PulseMetricsService } from './pulse-metrics.service';
+import { PulseLogBufferService } from './pulse-log-buffer.service';
 import { MaintenanceWindow } from '../../entities/maintenance-window.entity';
 import { StatusSubscriber } from '../../entities/status-subscriber.entity';
 import { v4 as uuidv4 } from 'uuid';
@@ -13,6 +14,7 @@ export class StatusEventsController {
   constructor(
     private readonly incidentsService: IncidentsService,
     private readonly pulseMetrics: PulseMetricsService,
+    private readonly logBuffer: PulseLogBufferService,
     @InjectRepository(MaintenanceWindow)
     private readonly maintenanceRepo: Repository<MaintenanceWindow>,
     @InjectRepository(StatusSubscriber)
@@ -178,6 +180,25 @@ export class StatusEventsController {
     sub.isActive = false;
     await this.subscriberRepo.save(sub);
     return { ok: true, message: 'Successfully unsubscribed' };
+  }
+
+  // ─── Live application logs ─────────────────────────────────────
+
+  @Get('logs')
+  async getLogs(
+    @Query('count') count?: string,
+    @Query('level') level?: string,
+    @Query('context') context?: string,
+    @Query('search') search?: string,
+  ) {
+    const n = count ? parseInt(count, 10) : 200;
+    return this.logBuffer.getLogs(Math.min(n, 500), level, context, search);
+  }
+
+  @Delete('logs')
+  async clearLogs() {
+    await this.logBuffer.clear();
+    return { ok: true, message: 'Log buffer cleared' };
   }
 
   // ─── Public status badge (SVG) ────────────────────────────────
