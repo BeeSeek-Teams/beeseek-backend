@@ -402,7 +402,7 @@ export class AuthService {
 
       // Create wallet for current account (We still create the wallet for usage)
       const walletDetails =
-        await this.monnifyService.createReservedAccount(user);
+        await this.monnifyService.createReservedAccount(user, verifyNINDto.ninNumber);
 
       // Update current user with verification details
       user.ninNumber = verifyNINDto.ninNumber;
@@ -431,7 +431,7 @@ export class AuthService {
           if (linkedUser.ninStatus !== NinStatus.VERIFIED) {
             // Create separate wallet for linked account
             const linkedWalletDetails =
-              await this.monnifyService.createReservedAccount(linkedUser);
+              await this.monnifyService.createReservedAccount(linkedUser, verifyNINDto.ninNumber);
 
             // Update linked account with same NIN
             linkedUser.ninNumber = verifyNINDto.ninNumber;

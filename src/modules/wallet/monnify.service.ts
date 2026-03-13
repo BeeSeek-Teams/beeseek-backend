@@ -99,7 +99,7 @@ export class MonnifyService {
   /**
    * Create reserved account (NUBAN) for user
    */
-  async createReservedAccount(user: User): Promise<{
+  async createReservedAccount(user: User, ninNumber?: string): Promise<{
     nuban: string;
     accountName: string;
     accountId: string;
@@ -110,19 +110,28 @@ export class MonnifyService {
       const accountReference = `${user.id}-${Date.now()}`;
       const accountName = `${user.firstName} ${user.lastName}`;
 
+      const payload: any = {
+        contractCode: process.env.MONNIFY_CONTRACT_CODE,
+        accountReference: accountReference,
+        accountName: accountName,
+        currencyCode: 'NGN',
+        customerName: accountName,
+        customerEmail: user.email,
+        getAllAvailableBanks: false,
+        preferredBanks: ['035', '050'],
+      };
+
+      // Monnify v2 requires BVN or NIN for reserved account creation
+      if (ninNumber) {
+        payload.nin = ninNumber;
+      }
+
+      this.logger.log(`Creating reserved account for user ${user.id} with NIN: ${ninNumber ? 'provided' : 'missing'}`);
+
       const response =
         await this.axiosInstance.post<MonnifyReservedAccountResponse>(
           '/api/v2/bank-transfer/reserved-accounts',
-          {
-            contractCode: process.env.MONNIFY_CONTRACT_CODE,
-            accountReference: accountReference,
-            accountName: accountName,
-            currencyCode: 'NGN',
-            customerName: accountName,
-            customerEmail: user.email,
-            getAllAvailableBanks: false,
-            preferredBanks: ['035', '050'],
-          },
+          payload,
           {
             headers: {
               Authorization: `Bearer ${token}`,
