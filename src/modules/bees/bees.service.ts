@@ -251,9 +251,8 @@ export class BeesService {
     const distanceSql = 'ST_Distance(bee.location, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography)';
     query.addSelect(distanceSql, 'distance_meters');
 
-    // Bayesian Relevance/Trust Scoring Logic
-    // This ranks 'Verified', 'Highly Rated', and 'Nearby' agents higher than just 'Closest'
-    // We also combine with Text Relevance if a search query is provided
+    // Relevance/Trust Scoring Logic
+    // Ranks 'Verified', 'Highly Rated', and 'Nearby' agents higher than just 'Closest'
     const relevanceScoreSql = `(
         (bee.rating * 1.5) + 
         (CASE WHEN agent.nin_verified_at IS NOT NULL THEN 2.0 ELSE 0 END) +
@@ -263,16 +262,10 @@ export class BeesService {
             WHEN ${distanceSql} < 10000 THEN 1.0
             ELSE 0 
          END) +
-        (LEAST(bee.jobsCompleted / 30.0, 1.0)) + -- Experience bonus (capped at 1pt)
-        (CASE 
-            WHEN :searchQuery::text IS NOT NULL THEN (
-            )
-            ELSE 0 
-        END)
+        (LEAST(bee.jobsCompleted / 30.0, 1.0)) -- Experience bonus (capped at 1pt)
     )`;
     query.addSelect(relevanceScoreSql, 'relevance_score');
     query.setParameter('searchQuery', search || null);
-    query.setParameter('searchLike', `%${search}%`);
 
     // Smart Filtering with Case-Insensitive Text Search
     if (search) {
