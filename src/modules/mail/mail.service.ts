@@ -14,11 +14,12 @@ export class MailService {
 
   constructor(private configService: ConfigService) {
     const host = this.configService.get('SMTP_HOST', 'smtp.hostinger.com');
-    const port = Number(this.configService.get('SMTP_PORT', 465));
+    const port = Number(this.configService.get('SMTP_PORT', 587));
     const user = this.configService.get('EMAIL_USER', 'no-reply@beeseek.site');
     const pass = this.configService.get<string>('EMAIL_PASS');
 
     // Port 465 = implicit SSL/TLS, Port 587 = STARTTLS
+    // Railway blocks port 465. Use 587 with STARTTLS.
     const secure = port === 465;
 
     this.logger.log(
