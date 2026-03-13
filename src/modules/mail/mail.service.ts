@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import * as dns from 'dns';
+
+// Force IPv4 DNS resolution globally — Railway containers lack IPv6 connectivity,
+// and smtp.hostinger.com resolves to IPv6 (via Cloudflare) first, causing ENETUNREACH.
+dns.setDefaultResultOrder('ipv4first');
 
 @Injectable()
 export class MailService {
@@ -32,7 +37,6 @@ export class MailService {
         rejectUnauthorized: false,
         minVersion: 'TLSv1.2',
       },
-      family: 4, // Force IPv4 to avoid ENETUNREACH on IPv6 in some cloud environments
       connectionTimeout: 10000,
       greetingTimeout: 10000,
       socketTimeout: 15000,
