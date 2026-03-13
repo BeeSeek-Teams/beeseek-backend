@@ -1,79 +1,45 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
-import * as dns from 'dns';
-import { lookup } from 'dns/promises';
-
-// Force IPv4 DNS resolution globally — Railway containers lack IPv6 connectivity
-dns.setDefaultResultOrder('ipv4first');
 
 @Injectable()
 export class MailService implements OnModuleInit {
   private transporter: nodemailer.Transporter;
   private readonly logger = new Logger(MailService.name);
-  private smtpHost: string;
-  private smtpPort: number;
-  private smtpUser: string;
-  private smtpPass: string | undefined;
 
   constructor(private configService: ConfigService) {
-    this.smtpHost = this.configService.get('SMTP_HOST', 'smtp.hostinger.com');
-    this.smtpPort = Number(this.configService.get('SMTP_PORT', 587));
-    this.smtpUser = this.configService.get('EMAIL_USER', 'no-reply@beeseek.site');
-    this.smtpPass = this.configService.get<string>('EMAIL_PASS');
-
-    // Create initial transporter with hostname (may fail on IPv6-only envs)
-    this.transporter = this.buildTransporter(this.smtpHost);
-  }
-
-  async onModuleInit() {
-    // Resolve hostname to IPv4 address to guarantee no IPv6 attempts
-    try {
-      const { address } = await lookup(this.smtpHost, { family: 4 });
-      this.logger.log(
-        `Resolved ${this.smtpHost} → ${address} (IPv4). Rebuilding transporter.`,
-      );
-      // Rebuild transporter using the resolved IPv4 address
-      this.transporter = this.buildTransporter(address);
-    } catch (err: any) {
-      this.logger.warn(
-        `DNS IPv4 lookup for ${this.smtpHost} failed: ${err.message}. Using hostname.`,
-      );
-    }
-
-    // Verify SMTP connection
-    this.transporter.verify().then(() => {
-      this.logger.log('SMTP connection verified successfully');
-    }).catch((err: any) => {
-      this.logger.error('SMTP connection verification FAILED:', err.message);
-    });
-  }
-
-  private buildTransporter(host: string): nodemailer.Transporter {
-    const port = this.smtpPort;
+    // smtp.hostinger.com resolves to Cloudflare IPs which do NOT proxy SMTP traffic.
+    // smtp.titan.email is Hostinger's actual Titan email SMTP server (AWS-hosted, directly reachable).
+    const host = this.configService.get('SMTP_HOST', 'smtp.titan.email');
+    const port = Number(this.configService.get('SMTP_PORT', 587));
+    const user = this.configService.get('EMAIL_USER', 'no-reply@beeseek.site');
+    const pass = this.configService.get<string>('EMAIL_PASS');
     const secure = port === 465;
 
     this.logger.log(
-      `MailService config: host=${host}, port=${port}, secure=${secure}, user=${this.smtpUser}, pass=${this.smtpPass ? '***SET***' : '!!!MISSING!!!'}`,
+      `MailService config: host=${host}, port=${port}, secure=${secure}, user=${user}, pass=${pass ? '***SET***' : '!!!MISSING!!!'}`,
     );
 
-    return nodemailer.createTransport({
+    this.transporter = nodemailer.createTransport({
       host,
       port,
       secure,
-      auth: {
-        user: this.smtpUser,
-        pass: this.smtpPass,
-      },
+      auth: { user, pass },
       tls: {
         rejectUnauthorized: false,
         minVersion: 'TLSv1.2',
-        // When using IP address, servername must be the original hostname for TLS cert validation
-        servername: this.smtpHost,
       },
       connectionTimeout: 15000,
       greetingTimeout: 15000,
       socketTimeout: 20000,
+    });
+  }
+
+  async onModuleInit() {
+    this.transporter.verify().then(() => {
+      this.logger.log('SMTP connection verified successfully');
+    }).catch((err: any) => {
+      this.logger.error('SMTP connection verification FAILED:', err.message);
     });
   }
 
