@@ -32,6 +32,7 @@ export class MailService {
         rejectUnauthorized: false,
         minVersion: 'TLSv1.2',
       },
+      family: 4, // Force IPv4 to avoid ENETUNREACH on IPv6 in some cloud environments
       connectionTimeout: 10000,
       greetingTimeout: 10000,
       socketTimeout: 15000,
