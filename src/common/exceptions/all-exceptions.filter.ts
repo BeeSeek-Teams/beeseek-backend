@@ -26,6 +26,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
       const exceptionResponse = exception.getResponse();
       message = (exceptionResponse as any).message || exception.message;
       errors = (exceptionResponse as any).error;
+      // Log client errors (4xx) at warn level for debugging
+      if (status >= 400 && status < 500) {
+        this.logger.warn(
+          `${request.method} ${request.url} → ${status}: ${Array.isArray(message) ? message.join(', ') : message}`,
+        );
+      }
     } else if (exception instanceof Error) {
       message = exception.message;
       this.logger.error(

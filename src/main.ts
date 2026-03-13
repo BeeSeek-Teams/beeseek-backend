@@ -3,6 +3,7 @@ import { ValidationPipe, Logger as NestLogger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import compression from 'compression';
+import * as bodyParser from 'body-parser';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/exceptions/all-exceptions.filter';
 import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
@@ -32,6 +33,10 @@ async function bootstrap() {
   // Response compression — reduces payload size by ~70% on JSON (critical for 2G/3G)
   app.use(compression());
 
+  // Increase body parser limits for JSON and URL-encoded payloads
+  app.use(bodyParser.json({ limit: '10mb' }));
+  app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
+
   // CORS — locked to real origins; never use `origin: true` in production
   const allowedOrigins = [
     'https://beeseek.site',
@@ -39,9 +44,6 @@ async function bootstrap() {
     'https://admin.beeseek.site',
     'https://pulse.beeseek.site',
     'https://beeseek-admin.vercel.app',
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:3002',
   ];
   app.enableCors({
     origin: (origin, callback) => {

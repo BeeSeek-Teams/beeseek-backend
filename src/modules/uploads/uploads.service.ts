@@ -15,6 +15,7 @@ interface MulterFile {
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_MIME_TYPES = [
   'image/jpeg',
+  'image/jpg',   // React Native sometimes sends image/jpg (from file extension)
   'image/png',
   'image/webp',
   'image/gif',
@@ -22,6 +23,7 @@ const ALLOWED_MIME_TYPES = [
   'video/mp4',
   'audio/mpeg',
   'audio/mp4',
+  'application/octet-stream', // Fallback when mime detection fails on mobile
 ];
 
 @Injectable()

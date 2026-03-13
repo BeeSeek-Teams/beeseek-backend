@@ -33,7 +33,7 @@ export class UploadsController {
 
   @Post('single')
   @Throttle({ default: { limit: 10, ttl: 60000 } })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
   async uploadSingle(
     @UploadedFile() file: MulterFile,
     @Query('folder') folder: string = 'general',
@@ -57,7 +57,7 @@ export class UploadsController {
 
   @Post('multiple')
   @Throttle({ default: { limit: 5, ttl: 60000 } })
-  @UseInterceptors(FilesInterceptor('files', 5)) // Limit to 5 files max
+  @UseInterceptors(FilesInterceptor('files', 5, { limits: { fileSize: 10 * 1024 * 1024 } }))
   async uploadMultiple(
     @UploadedFiles() files: MulterFile[],
     @Query('folder') folder: string = 'general',
