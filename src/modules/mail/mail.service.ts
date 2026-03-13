@@ -9,12 +9,16 @@ export class MailService {
 
   constructor(private configService: ConfigService) {
     const host = this.configService.get('SMTP_HOST', 'smtp.hostinger.com');
-    const port = Number(this.configService.get('SMTP_PORT', 587));
+    const port = Number(this.configService.get('SMTP_PORT', 465));
     const user = this.configService.get('EMAIL_USER', 'no-reply@beeseek.site');
     const pass = this.configService.get<string>('EMAIL_PASS');
 
-    // Port 465 is SSL/TLS (Implicit). Port 587 is STARTTLS (Explicit).
+    // Port 465 = implicit SSL/TLS, Port 587 = STARTTLS
     const secure = port === 465;
+
+    this.logger.log(
+      `MailService config: host=${host}, port=${port}, secure=${secure}, user=${user}, pass=${pass ? '***SET***' : '!!!MISSING!!!'}`,
+    );
 
     this.transporter = nodemailer.createTransport({
       host,
@@ -28,11 +32,17 @@ export class MailService {
         rejectUnauthorized: false,
         minVersion: 'TLSv1.2',
       },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
     });
 
-    this.logger.log(
-      `MailService initialized with host: ${host}, port: ${port}, secure: ${secure}`,
-    );
+    // Verify SMTP connection on startup
+    this.transporter.verify().then(() => {
+      this.logger.log('SMTP connection verified successfully');
+    }).catch((err) => {
+      this.logger.error('SMTP connection verification FAILED:', err.message);
+    });
   }
 
   private readonly commonStyles = `
@@ -269,6 +279,7 @@ export class MailService {
       'FROM_EMAIL',
       this.configService.get('EMAIL_USER', 'no-reply@beeseek.site'),
     );
+    this.logger.log(`Attempting to send email to=${to}, subject="${subject}", from=${from}`);
     try {
       const info = await this.transporter.sendMail({
         from: `"BeeSeek" <${from}>`,
@@ -276,10 +287,12 @@ export class MailService {
         subject,
         html,
       });
-      this.logger.log(`Email sent: ${info.messageId}`);
+      this.logger.log(`Email sent successfully: messageId=${info.messageId}, response=${info.response}`);
       return info;
-    } catch (error) {
-      this.logger.error(`Error sending email to ${to}:`, error);
+    } catch (error: any) {
+      this.logger.error(
+        `FAILED to send email to ${to}: ${error.message} | code=${error.code} | command=${error.command} | responseCode=${error.responseCode}`,
+      );
       throw error;
     }
   }

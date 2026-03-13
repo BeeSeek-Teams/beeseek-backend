@@ -166,8 +166,8 @@ export class AuthService {
         .sendOTP(savedUser.email, savedUser.firstName, otp, 'VERIFICATION')
         .catch((err) =>
           this.logger.error(
-            `Failed to send background OTP email to ${savedUser.email}`,
-            err,
+            `Failed to send OTP email to ${savedUser.email}: ${err?.message} | code=${err?.code} | responseCode=${err?.responseCode}`,
+            err?.stack,
           ),
         );
 
