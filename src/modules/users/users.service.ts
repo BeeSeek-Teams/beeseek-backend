@@ -248,7 +248,11 @@ export class UsersService {
   async getPendingVerifications() {
     return this.usersRepository.find({
       where: { ninStatus: NinStatus.PENDING, isDeleted: false },
-      select: ['id', 'firstName', 'lastName', 'email', 'ninNumber', 'ninStatus', 'createdAt', 'profileImage'],
+      select: [
+        'id', 'firstName', 'lastName', 'email', 'ninNumber', 'ninStatus',
+        'createdAt', 'profileImage', 'phone', 'role', 'age',
+        'deviceType', 'deviceModel', 'lastLoginAt', 'lastIpAddress',
+      ],
       order: { createdAt: 'ASC' }
     });
   }
