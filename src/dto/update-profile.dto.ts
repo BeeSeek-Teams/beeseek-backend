@@ -64,6 +64,10 @@ export class UpdateProfileDto {
   // Device info (updated on login, but also allowed from profile)
   @IsOptional()
   @IsString()
+  deviceId?: string;
+
+  @IsOptional()
+  @IsString()
   deviceType?: string;
 
   @IsOptional()
