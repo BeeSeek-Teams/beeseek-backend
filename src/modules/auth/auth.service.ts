@@ -416,6 +416,7 @@ export class AuthService {
       user.monnifyAccountId = walletDetails.accountId;
       user.monnifyNUBAN = walletDetails.nuban;
       user.monnifyBankName = walletDetails.bankName || null;
+      user.monnifyAccountName = walletDetails.accountName || null;
       user.monnifyBVN = verifyNINDto.bvnNumber ?? '';
 
       await queryRunner.manager.save(user);
@@ -442,6 +443,7 @@ export class AuthService {
             linkedUser.monnifyAccountId = linkedWalletDetails.accountId;
             linkedUser.monnifyNUBAN = linkedWalletDetails.nuban;
             linkedUser.monnifyBankName = linkedWalletDetails.bankName || null;
+            linkedUser.monnifyAccountName = linkedWalletDetails.accountName || null;
             linkedUser.monnifyBVN = verifyNINDto.bvnNumber ?? '';
 
             await queryRunner.manager.save(linkedUser);
@@ -785,6 +787,7 @@ export class AuthService {
         lockedBalance: user.lockedBalance,
         monnifyNUBAN: user.monnifyNUBAN ?? undefined,
         monnifyBankName: user.monnifyBankName ?? undefined,
+        monnifyAccountName: user.monnifyAccountName ?? undefined,
         deviceType: user.deviceType ?? undefined,
         emergencyContactName: user.emergencyContactName ?? undefined,
         emergencyContactPhone: user.emergencyContactPhone ?? undefined,

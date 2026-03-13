@@ -324,6 +324,7 @@ export class UsersService {
             if (existing?.nuban) {
               updateData.monnifyNUBAN = existing.nuban;
               updateData.monnifyBankName = existing.bankName;
+              updateData.monnifyAccountName = existing.accountName || null;
               this.logger.log(`[Approval] Retrieved existing account: ${existing.bankName} — ${existing.nuban}`);
             }
           }
@@ -335,6 +336,7 @@ export class UsersService {
             updateData.monnifyNUBAN = wallet.nuban;
             updateData.monnifyAccountId = wallet.accountId;
             updateData.monnifyBankName = wallet.bankName;
+            updateData.monnifyAccountName = wallet.accountName || null;
             this.logger.log(`[Approval] Reserved account created: ${wallet.bankName} — ${wallet.nuban}`);
           }
         } catch (err) {
@@ -414,6 +416,7 @@ export class UsersService {
         message: 'Wallet already has NUBAN',
         nuban: user.monnifyNUBAN,
         bankName: user.monnifyBankName,
+        accountName: user.monnifyAccountName,
       };
     }
 
@@ -425,6 +428,7 @@ export class UsersService {
         await this.usersRepository.update(userId, {
           monnifyNUBAN: existing.nuban,
           monnifyBankName: existing.bankName,
+          monnifyAccountName: existing.accountName || null,
         });
         this.logger.log(`[RepairWallet] Updated user ${user.id}: ${existing.bankName} — ${existing.nuban}`);
         return {
@@ -432,6 +436,7 @@ export class UsersService {
           message: 'Retrieved and updated from Monnify',
           nuban: existing.nuban,
           bankName: existing.bankName,
+          accountName: existing.accountName,
         };
       }
     }
@@ -447,6 +452,7 @@ export class UsersService {
       monnifyNUBAN: wallet.nuban,
       monnifyAccountId: wallet.accountId,
       monnifyBankName: wallet.bankName,
+      monnifyAccountName: wallet.accountName || null,
     });
 
     return {
@@ -454,6 +460,7 @@ export class UsersService {
       message: 'Created new reserved account',
       nuban: wallet.nuban,
       bankName: wallet.bankName,
+      accountName: wallet.accountName,
     };
   }
 
