@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Logger,
   UploadedFile,
   UploadedFiles,
   UseInterceptors,
@@ -26,6 +27,8 @@ interface MulterFile {
 @Controller('uploads')
 @UseGuards(JwtAuthGuard)
 export class UploadsController {
+  private readonly logger = new Logger(UploadsController.name);
+
   constructor(private readonly uploadsService: UploadsService) {}
 
   @Post('single')
@@ -36,13 +39,20 @@ export class UploadsController {
     @Query('folder') folder: string = 'general',
   ) {
     if (!file) {
+      this.logger.warn('Upload attempt with no file attached');
       throw new BadRequestException('File is required');
     }
-    const result = await this.uploadsService.uploadImage(file, folder);
-    return {
-      url: result.secure_url,
-      publicId: result.public_id,
-    };
+    this.logger.log(`Upload: name=${file.originalname}, mime=${file.mimetype}, size=${file.size}, folder=${folder}`);
+    try {
+      const result = await this.uploadsService.uploadImage(file, folder);
+      return {
+        url: result.secure_url,
+        publicId: result.public_id,
+      };
+    } catch (error: any) {
+      this.logger.error(`Upload failed: ${error.message}`);
+      throw error;
+    }
   }
 
   @Post('multiple')

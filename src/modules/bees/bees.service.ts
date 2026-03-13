@@ -14,11 +14,16 @@ export class BeesService {
     private beesRepository: Repository<Bee>,
   ) {}
 
+  /** Build a GeoJSON Point that PostGIS geography columns understand */
+  private toGeoPoint(lng: number, lat: number): object {
+    return { type: 'Point', coordinates: [lng, lat] };
+  }
+
   async create(createBeeDto: CreateBeeDto, agent: User): Promise<Bee> {
     const bee = this.beesRepository.create({
       ...createBeeDto,
       agentId: agent.id,
-      location: `POINT(${createBeeDto.longitude} ${createBeeDto.latitude})`,
+      location: this.toGeoPoint(createBeeDto.longitude, createBeeDto.latitude) as any,
     });
     return this.beesRepository.save(bee);
   }
@@ -64,7 +69,7 @@ export class BeesService {
     
     // Update spatial location if coordinates changed
     if (updateBeeDto.latitude !== undefined || updateBeeDto.longitude !== undefined) {
-      bee.location = `POINT(${bee.longitude} ${bee.latitude})`;
+      bee.location = this.toGeoPoint(bee.longitude, bee.latitude) as any;
     }
     
     return this.beesRepository.save(bee);
@@ -88,7 +93,7 @@ export class BeesService {
       bee.latitude = lat;
       bee.longitude = lng;
       bee.locationAddress = address;
-      bee.location = `POINT(${lng} ${lat})`;
+      bee.location = this.toGeoPoint(lng, lat) as any;
     }
 
     await this.beesRepository.save(bees);
