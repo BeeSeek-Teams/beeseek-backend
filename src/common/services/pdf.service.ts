@@ -63,13 +63,18 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
             '--disable-extensions',
             '--disable-crashpad',
             '--disable-breakpad',
+            '--disable-component-extensions-with-background-pages',
+            '--disable-component-update',
+            '--disable-plugins',
+            '--disable-plugin-power-saver',
             '--single-process',
           ],
-          // Suppress crashpad handler errors in containerised environments
+          // Suppress all crash/breakpad functionality in containerised environments
           env: {
             ...process.env,
             CHROME_CRASHPAD_PIPE_NAME: '',
             CHROME_HEADLESS: '1',
+            BREAKPAD_DUMP_LOCATION: '/tmp',
           },
         });
 

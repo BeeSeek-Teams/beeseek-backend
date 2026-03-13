@@ -46,7 +46,7 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 # Remove crashpad handler that causes "chrome_crashpad_handler: --database is required" errors
 # in containerised environments — crash reporting is not needed in production containers
-RUN rm -f /usr/lib/chromium/chrome_crashpad_handler 2>/dev/null || true
+RUN rm -f /usr/bin/chrome_crashpad_handler /usr/lib/chromium/chrome_crashpad_handler /usr/lib/chromium-browser/chrome_crashpad_handler 2>/dev/null || true
 
 # Security: run as non-root
 RUN groupadd -r appgroup && useradd -r -g appgroup -G audio,video appuser
