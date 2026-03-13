@@ -1,53 +1,79 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import * as dns from 'dns';
+import { lookup } from 'dns/promises';
 
-// Force IPv4 DNS resolution globally — Railway containers lack IPv6 connectivity,
-// and smtp.hostinger.com resolves to IPv6 (via Cloudflare) first, causing ENETUNREACH.
+// Force IPv4 DNS resolution globally — Railway containers lack IPv6 connectivity
 dns.setDefaultResultOrder('ipv4first');
 
 @Injectable()
-export class MailService {
+export class MailService implements OnModuleInit {
   private transporter: nodemailer.Transporter;
   private readonly logger = new Logger(MailService.name);
+  private smtpHost: string;
+  private smtpPort: number;
+  private smtpUser: string;
+  private smtpPass: string | undefined;
 
   constructor(private configService: ConfigService) {
-    const host = this.configService.get('SMTP_HOST', 'smtp.hostinger.com');
-    const port = Number(this.configService.get('SMTP_PORT', 587));
-    const user = this.configService.get('EMAIL_USER', 'no-reply@beeseek.site');
-    const pass = this.configService.get<string>('EMAIL_PASS');
+    this.smtpHost = this.configService.get('SMTP_HOST', 'smtp.hostinger.com');
+    this.smtpPort = Number(this.configService.get('SMTP_PORT', 587));
+    this.smtpUser = this.configService.get('EMAIL_USER', 'no-reply@beeseek.site');
+    this.smtpPass = this.configService.get<string>('EMAIL_PASS');
 
-    // Port 465 = implicit SSL/TLS, Port 587 = STARTTLS
-    // Railway blocks port 465. Use 587 with STARTTLS.
+    // Create initial transporter with hostname (may fail on IPv6-only envs)
+    this.transporter = this.buildTransporter(this.smtpHost);
+  }
+
+  async onModuleInit() {
+    // Resolve hostname to IPv4 address to guarantee no IPv6 attempts
+    try {
+      const { address } = await lookup(this.smtpHost, { family: 4 });
+      this.logger.log(
+        `Resolved ${this.smtpHost} → ${address} (IPv4). Rebuilding transporter.`,
+      );
+      // Rebuild transporter using the resolved IPv4 address
+      this.transporter = this.buildTransporter(address);
+    } catch (err: any) {
+      this.logger.warn(
+        `DNS IPv4 lookup for ${this.smtpHost} failed: ${err.message}. Using hostname.`,
+      );
+    }
+
+    // Verify SMTP connection
+    this.transporter.verify().then(() => {
+      this.logger.log('SMTP connection verified successfully');
+    }).catch((err: any) => {
+      this.logger.error('SMTP connection verification FAILED:', err.message);
+    });
+  }
+
+  private buildTransporter(host: string): nodemailer.Transporter {
+    const port = this.smtpPort;
     const secure = port === 465;
 
     this.logger.log(
-      `MailService config: host=${host}, port=${port}, secure=${secure}, user=${user}, pass=${pass ? '***SET***' : '!!!MISSING!!!'}`,
+      `MailService config: host=${host}, port=${port}, secure=${secure}, user=${this.smtpUser}, pass=${this.smtpPass ? '***SET***' : '!!!MISSING!!!'}`,
     );
 
-    this.transporter = nodemailer.createTransport({
+    return nodemailer.createTransport({
       host,
       port,
       secure,
       auth: {
-        user,
-        pass,
+        user: this.smtpUser,
+        pass: this.smtpPass,
       },
       tls: {
         rejectUnauthorized: false,
         minVersion: 'TLSv1.2',
+        // When using IP address, servername must be the original hostname for TLS cert validation
+        servername: this.smtpHost,
       },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-    });
-
-    // Verify SMTP connection on startup
-    this.transporter.verify().then(() => {
-      this.logger.log('SMTP connection verified successfully');
-    }).catch((err) => {
-      this.logger.error('SMTP connection verification FAILED:', err.message);
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 20000,
     });
   }
 
