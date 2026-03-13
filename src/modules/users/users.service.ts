@@ -352,7 +352,7 @@ export class UsersService {
         reportId: bgCheck.reportId,
         checkedAt: new Date().toISOString(),
         error: bgCheck.error,
-      },
+      } as any,
     });
 
     return {
