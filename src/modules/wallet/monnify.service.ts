@@ -112,7 +112,7 @@ export class MonnifyService {
 
       const response =
         await this.axiosInstance.post<MonnifyReservedAccountResponse>(
-          '/api/v1/bank-transfer/reserved-accounts',
+          '/api/v2/bank-transfer/reserved-accounts',
           {
             contractCode: process.env.MONNIFY_CONTRACT_CODE,
             accountReference: accountReference,
@@ -164,7 +164,7 @@ export class MonnifyService {
       const token = await this.getValidToken();
 
       const response = await this.axiosInstance.get(
-        `/api/v1/bank-transfer/reserved-accounts/${accountReference}`,
+        `/api/v2/bank-transfer/reserved-accounts/${accountReference}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -194,14 +194,15 @@ export class MonnifyService {
       const token = await this.getValidToken();
 
       const response = await this.axiosInstance.get(
-        `/api/v1/bank-transfer/transactions/reserved-account/${accountReference}`,
+        '/api/v1/bank-transfer/reserved-accounts/transactions',
         {
           headers: {
             Authorization: `Bearer ${token}`,
           },
           params: {
-            pageSize,
-            pageNumber,
+            accountReference,
+            page: pageNumber - 1,
+            size: pageSize,
           },
         },
       );
@@ -290,7 +291,7 @@ export class MonnifyService {
       }
 
       const response = await this.axiosInstance.post(
-        '/api/v1/disbursements/single',
+        '/api/v2/disbursements/single',
         {
           amount,
           reference: transactionReference,
