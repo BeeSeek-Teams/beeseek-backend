@@ -11,6 +11,7 @@ import { Transaction } from '../../entities/transaction.entity';
 import { Notification } from '../../entities/notification.entity';
 import { MailModule } from '../mail/mail.module';
 import { BackgroundCheckService } from '../../common/services/background-check.service';
+import { MonnifyService } from '../wallet/monnify.service';
 
 @Module({
   imports: [
@@ -18,7 +19,7 @@ import { BackgroundCheckService } from '../../common/services/background-check.s
     MailModule,
   ],
   controllers: [UsersController],
-  providers: [UsersService, BackgroundCheckService],
+  providers: [UsersService, BackgroundCheckService, MonnifyService],
   exports: [UsersService],
 })
 export class UsersModule {}

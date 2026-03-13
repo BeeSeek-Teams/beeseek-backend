@@ -153,6 +153,7 @@ export class AuthResponseDto {
     walletBalance?: number;
     lockedBalance?: number;
     monnifyNUBAN?: string;
+    monnifyBankName?: string;
     deviceType?: string;
     emergencyContactName?: string;
     emergencyContactPhone?: string;

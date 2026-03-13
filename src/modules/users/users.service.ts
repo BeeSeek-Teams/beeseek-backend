@@ -9,6 +9,7 @@ import { Review } from '../../entities/review.entity';
 import { Transaction } from '../../entities/transaction.entity';
 import { Notification } from '../../entities/notification.entity';
 import { MailService } from '../mail/mail.service';
+import { MonnifyService } from '../wallet/monnify.service';
 import { BackgroundCheckService } from '../../common/services/background-check.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import * as bcrypt from 'bcrypt';
@@ -34,6 +35,7 @@ export class UsersService {
     @InjectRepository(Notification)
     private notificationsRepository: Repository<Notification>,
     private mailService: MailService,
+    private monnifyService: MonnifyService,
     private backgroundCheckService: BackgroundCheckService,
   ) {}
 
@@ -309,6 +311,22 @@ export class UsersService {
       updateData.ninVerifiedAt = new Date();
       if (registryName && !updateData.ninRegistryName) {
         updateData.ninRegistryName = registryName;
+      }
+
+      // Safety net: if the user has no NUBAN (e.g. old bug where accounts[0] wasn't read),
+      // re-create the reserved account now so wallet funding works immediately.
+      if (!user.monnifyNUBAN && user.ninNumber) {
+        try {
+          this.logger.log(`[Approval] User ${user.id} has no NUBAN — creating reserved account now`);
+          const wallet = await this.monnifyService.createReservedAccount(user, user.ninNumber);
+          updateData.monnifyNUBAN = wallet.nuban;
+          updateData.monnifyAccountId = wallet.accountId;
+          updateData.monnifyBankName = wallet.bankName;
+          this.logger.log(`[Approval] Reserved account created: ${wallet.bankName} — ${wallet.nuban}`);
+        } catch (err) {
+          this.logger.error(`[Approval] Failed to create reserved account for user ${user.id}: ${err.message}`);
+          // Don't block approval — admin explicitly approved, account can be retried
+        }
       }
     } else if (status === NinStatus.REJECTED) {
       updateData.isNinVerified = false;

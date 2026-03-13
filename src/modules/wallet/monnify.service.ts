@@ -16,15 +16,23 @@ interface MonnifyReservedAccountResponse {
   requestSuccessful: boolean;
   responseMessage: string;
   responseBody?: {
-    accountNumber: string;
-    accountName: string;
-    currencyCode: string;
     contractCode: string;
     accountReference: string;
+    accountName: string;
+    currencyCode: string;
+    customerEmail: string;
+    customerName: string;
+    accounts: Array<{
+      bankCode: string;
+      bankName: string;
+      accountNumber: string;
+      accountName: string;
+    }>;
+    collectionChannel: string;
     reservationReference: string;
-    incomeSplitConfig: any[];
-    createdOn: string;
     status: string;
+    createdOn: string;
+    incomeSplitConfig: any[];
   };
 }
 
@@ -103,6 +111,8 @@ export class MonnifyService {
     nuban: string;
     accountName: string;
     accountId: string;
+    bankName: string;
+    bankCode: string;
   }> {
     try {
       const token = await this.getValidToken();
@@ -147,11 +157,25 @@ export class MonnifyService {
       }
 
       const body = response.data.responseBody;
+      const account = body?.accounts?.[0];
+
+      if (!account?.accountNumber) {
+        this.logger.error(
+          `Monnify reserved account created but no account number returned. Full response: ${JSON.stringify(body)}`,
+        );
+        throw new Error('Reserved account created but no account number in response');
+      }
+
+      this.logger.log(
+        `Reserved account created for user ${user.id}: ${account.bankName} — ${account.accountNumber}`,
+      );
 
       return {
-        nuban: body?.accountNumber || '',
-        accountName: body?.accountName || '',
+        nuban: account.accountNumber,
+        accountName: account.accountName || body?.accountName || '',
         accountId: body?.accountReference || '',
+        bankName: account.bankName || '',
+        bankCode: account.bankCode || '',
       };
     } catch (error) {
       const status = error.response?.status;

@@ -161,6 +161,9 @@ export class User {
   monnifyNUBAN: string | null;
 
   @Column({ type: 'varchar', nullable: true })
+  monnifyBankName: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
   monnifyBVN: string | null;
 
   // Wallet balances stored in minor units (Kobo) as bigints for precision and auditability
