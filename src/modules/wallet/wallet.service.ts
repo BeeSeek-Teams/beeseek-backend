@@ -200,6 +200,29 @@ export class WalletService {
         }
       );
 
+      // 6. Send email receipt for wallet top-ups
+      if (type === TransactionType.CREDIT) {
+        try {
+          const fullUser = await manager.findOne(User, { where: { id: userId } });
+          if (fullUser && fullUser.email) {
+            const formattedDate = new Date(savedTransaction.createdAt).toLocaleDateString('en-NG', {
+              year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+            });
+            await this.mailService.sendWalletTopUpReceipt(
+              fullUser.email,
+              `${fullUser.firstName} ${fullUser.lastName}`,
+              {
+                amount: (amountKobo / 100).toLocaleString(),
+                reference: idempotencyKey || savedTransaction.id,
+                timestamp: formattedDate,
+              }
+            );
+          }
+        } catch (err) {
+          this.logger.warn(`Failed to send wallet top-up receipt for user ${userId}: ${err.message}`);
+        }
+      }
+
       return savedTransaction;
     });
   }

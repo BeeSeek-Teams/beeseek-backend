@@ -336,6 +336,39 @@ export class MailService implements OnModuleInit {
     return this.sendMail(to, 'Withdrawal Notification - BeeSeek', html);
   }
 
+  async sendWalletTopUpReceipt(to: string, name: string, data: { amount: string, reference: string, timestamp: string }) {
+    const html = this.wrapTemplate(`
+      <h1 style="font-size: 24px; font-weight: 700; margin: 0 0 16px 0; color: #031745;">Wallet Top-Up Confirmed</h1>
+      <p style="font-size: 16px; line-height: 1.5; color: #4B5563; margin: 0 0 24px 0;">
+        Hello ${name},<br><br>
+        Your wallet has been successfully credited with the funds from your bank transfer.
+      </p>
+
+      <div style="background-color: #F8F9FA; border-radius: 12px; padding: 24px; margin-bottom: 24px; border: 1px solid #E5E5E5;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 8px 0; color: #6B7280; font-size: 14px;">Amount Credited</td>
+            <td style="padding: 8px 0; color: #031745; font-size: 14px; font-weight: 600; text-align: right;">₦${data.amount}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #6B7280; font-size: 14px;">Transaction Reference</td>
+            <td style="padding: 8px 0; color: #031745; font-size: 14px; font-weight: 600; text-align: right;">${data.reference}</td>
+          </tr>
+          <tr>
+            <td style="padding: 16px 0 8px 0; color: #6B7280; font-size: 14px; border-top: 1px solid #E5E5E5;">Date and Time</td>
+            <td style="padding: 16px 0 8px 0; color: #031745; font-size: 14px; font-weight: 600; text-align: right; border-top: 1px solid #E5E5E5;">${data.timestamp}</td>
+          </tr>
+        </table>
+      </div>
+
+      <p style="font-size: 14px; color: #6B7280; margin: 0;">
+        Your wallet balance has been updated instantly and you can now use these funds for bookings and transactions on the BeeSeek platform.
+      </p>
+    `);
+
+    return this.sendMail(to, 'Wallet Top-Up Receipt - BeeSeek', html);
+  }
+
   async sendAccountReactivatedEmail(to: string, name: string) {
     const html = this.wrapTemplate(`
       <h1 style="font-size: 24px; font-weight: 700; margin: 0 0 16px 0; color: #031745;">Welcome Back to BeeSeek!</h1>
