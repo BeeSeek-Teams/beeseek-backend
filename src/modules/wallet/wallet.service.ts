@@ -124,9 +124,17 @@ export class WalletService {
       .where('tx.type = :type', { type: TransactionType.REVENUE })
       .getRawOne();
 
+    // Calculate success rate (successful transactions / all transactions)
+    const totalSuccessful = await this.transactionRepository.count({
+      where: { status: TransactionStatus.SUCCESS },
+    });
+    const totalTransactions = await this.transactionRepository.count();
+    const successRate = totalTransactions > 0 ? ((totalSuccessful / totalTransactions) * 100).toFixed(1) : '0.0';
+
     return {
       byType: stats,
       revenue: revenueStats,
+      successRate: parseFloat(successRate),
     };
   }
 

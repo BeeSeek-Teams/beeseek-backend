@@ -456,15 +456,21 @@ export class AnalyticsService {
         type: 'bee',
         label: b.title,
         sublabel: b.category,
+        color: '#FF6B35', // Orange for bees
       })),
-      ...users.filter(u => u.latitude && u.longitude).map(u => ({
-        id: u.id,
-        lat: Number(u.latitude),
-        lng: Number(u.longitude),
-        type: 'user',
-        label: `${u.firstName} ${u.lastName}`,
-        sublabel: u.role,
-      })),
+      ...users.filter(u => u.latitude && u.longitude).map(u => {
+        // Determine user type: agent or client
+        const isAgent = u.role === 'AGENT';
+        return {
+          id: u.id,
+          lat: Number(u.latitude),
+          lng: Number(u.longitude),
+          type: isAgent ? 'agent' : 'client',
+          label: `${u.firstName} ${u.lastName}`,
+          sublabel: isAgent ? 'Service Provider' : 'Client',
+          color: isAgent ? '#4ECDC4' : '#1E90FF', // Teal for agents, Blue for clients
+        };
+      }),
     ];
 
     return markers;
