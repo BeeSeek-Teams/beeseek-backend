@@ -23,6 +23,16 @@ const ALLOWED_MIME_TYPES = [
   'video/mp4',
   'audio/mpeg',
   'audio/mp4',
+  'audio/m4a',
+  'video/m4a',   // React Native/iOS often reports .m4a as video/m4a
+  'audio/x-m4a',
+  'audio/aac',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/webm',
+  'audio/ogg',
+  'audio/3gpp',  // Android voice recorder format
+  'video/3gpp',  // Android sometimes sends 3gpp as video
   'application/octet-stream', // Fallback when mime detection fails on mobile
 ];
 
@@ -51,16 +61,19 @@ export class UploadsService {
     return new Promise((resolve, reject) => {
       this.validateFile(file);
 
+      const isImage = file.mimetype.startsWith('image/');
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder: `beeseek/${folder}`,
           resource_type: 'auto',
-          // Optimize for web on the server side as a fallback
-          transformation: [
-            { width: 1000, crop: 'limit' },
-            { quality: 'auto' },
-            { fetch_format: 'auto' },
-          ],
+          // Only apply image transformations to actual images
+          ...(isImage && {
+            transformation: [
+              { width: 1000, crop: 'limit' },
+              { quality: 'auto' },
+              { fetch_format: 'auto' },
+            ],
+          }),
         },
         (error: any, result?: UploadApiResponse) => {
           if (error) return reject(error);
