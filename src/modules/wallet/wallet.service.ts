@@ -466,17 +466,10 @@ export class WalletService {
     if (body.eventType === 'SUCCESSFUL_TRANSACTION') {
       const data = body.eventData;
       
-      // Log full webhook payload to understand structure
-      this.logger.log(`Webhook eventData: ${JSON.stringify(data, null, 2)}`);
-      
       const amountKobo = Math.round(data.amountPaid * 100);
       
-      // Try multiple possible field paths for NUBAN
-      let nuban = data.destinationAccountDetails?.accountNumber || 
-                  data.destinationAccountNumber ||
-                  data.accountNumber ||
-                  data.reservedAccountNumber;
-      
+      // Extract NUBAN from destinationAccountInformation
+      const nuban = data.destinationAccountInformation?.accountNumber;
       const transactionRef = data.transactionReference;
 
       if (!nuban) {
@@ -497,7 +490,8 @@ export class WalletService {
       }
 
       // 4. Process Payment (Atomicity & Idempotency handled inside)
-      const description = `Wallet Top Up via Bank Transfer (${data.sourceAccountNumber})`;
+      const sourceAccountNumber = data.paymentSourceInformation?.[0]?.accountNumber || 'Unknown';
+      const description = `Wallet Top Up via Bank Transfer (${sourceAccountNumber})`;
       await this.processPayment(
         user.id,
         amountKobo,
