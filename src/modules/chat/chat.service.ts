@@ -244,6 +244,14 @@ export class ChatService {
             senderId: senderId,
           }
         );
+
+        // Emit notification badge update to client (notification bell icon)
+        try {
+          const { count } = await this.notificationsService.getUnreadCount(recipientId);
+          this.chatGateway.sendToUser(recipientId, 'notificationUnreadUpdate', { count });
+        } catch (err) {
+          this.logger.warn(`Failed to emit notification update: ${err.message}`);
+        }
       } catch (err) {
         this.logger.warn(`Failed to create notification for chat message: ${err.message}`);
       }
