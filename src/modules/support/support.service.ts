@@ -210,13 +210,15 @@ export class SupportService {
     return updatedTicket;
   }
 
-  async addMessage(ticketId: string, senderId: string, text: string, isFromSupport: boolean): Promise<SupportMessage> {
+  async addMessage(ticketId: string, senderId: string, text: string, isFromSupport: boolean, type: string = 'text', mediaUrl?: string): Promise<SupportMessage> {
     const ticket = await this.ticketRepository.findOne({ where: { id: ticketId }, relations: ['user'] });
     if (!ticket) throw new NotFoundException('Ticket not found');
 
     const messageData: any = {
       text,
       isFromSupport,
+      type,
+      mediaUrl: mediaUrl || null,
       ticket,
     };
 
@@ -247,24 +249,29 @@ export class SupportService {
 
     // Send notifications for new messages from support team
     if (isFromSupport) {
-      // Send email to user
-      try {
-        await this.mailService.sendSupportMessageReceived(
-          ticket.user.email,
-          ticket.user.firstName,
-          ticket.id,
-          text,
-        );
-      } catch (err) {
-        this.logger.error(`Failed to send support message email: ${err.message}`);
+      // Only send email on first support reply (not every message) to avoid burning email quota
+      const supportMessageCount = await this.messageRepository.count({
+        where: { ticket: { id: ticketId }, isFromSupport: true },
+      });
+      if (supportMessageCount <= 1) {
+        try {
+          await this.mailService.sendSupportMessageReceived(
+            ticket.user.email,
+            ticket.user.firstName,
+            ticket.id,
+            text,
+          );
+        } catch (err) {
+          this.logger.error(`Failed to send support message email: ${err.message}`);
+        }
       }
 
-      // Send push notification to user
+      // Push notification is fine for every message (free via FCM)
       try {
         await this.notificationsService.notify(
           ticket.userId,
           'New Message on Your Ticket',
-          text.slice(0, 80),
+          type === 'image' ? 'Sent an image' : type === 'audio' ? 'Sent a voice message' : text.slice(0, 80),
           'SUPPORT' as any,
           { ticketId: ticket.id },
         );

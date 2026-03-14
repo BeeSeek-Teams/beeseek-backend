@@ -14,6 +14,12 @@ export class SupportMessage {
   @Column({ default: false })
   isFromSupport: boolean;
 
+  @Column({ default: 'text' })
+  type: string;
+
+  @Column({ nullable: true })
+  mediaUrl: string;
+
   @ManyToOne(() => SupportTicket, (ticket) => ticket.messages, { onDelete: 'CASCADE' })
   ticket: SupportTicket;
 

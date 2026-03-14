@@ -55,8 +55,10 @@ export class SupportController {
     @CurrentUser() user: User,
     @Param('id') id: string,
     @Body('text') text: string,
+    @Body('type') type: string = 'text',
+    @Body('mediaUrl') mediaUrl?: string,
   ) {
-    return this.supportService.addMessage(id, user.id, text, false);
+    return this.supportService.addMessage(id, user.id, text, false, type, mediaUrl);
   }
 
   // ADMIN ENDPOINTS
@@ -102,7 +104,9 @@ export class SupportController {
     @CurrentUser() admin: any,
     @Param('id') id: string,
     @Body('text') text: string,
+    @Body('type') type: string = 'text',
+    @Body('mediaUrl') mediaUrl?: string,
   ) {
-    return this.supportService.addMessage(id, admin.id, text, true);
+    return this.supportService.addMessage(id, admin.id, text, true, type, mediaUrl);
   }
 }
