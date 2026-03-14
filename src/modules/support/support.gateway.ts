@@ -104,4 +104,9 @@ export class SupportGateway implements OnGatewayConnection, OnGatewayDisconnect 
   broadcastToTicket(ticketId: string, event: string, payload: any) {
     this.server.to(`ticket_${ticketId}`).emit(event, payload);
   }
+
+  // Broadcast new ticket to all connected admins
+  broadcastNewTicket(ticket: any) {
+    this.server.emit('newTicket', ticket);
+  }
 }

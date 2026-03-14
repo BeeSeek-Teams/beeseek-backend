@@ -32,6 +32,17 @@ export class SupportService {
     // Create initial message from user's description
     await this.addMessage(savedTicket.id, userId, description, false);
 
+    // Fetch full ticket with user details for broadcast
+    const ticketWithUser = await this.ticketRepository.findOne({
+      where: { id: savedTicket.id },
+      relations: ['user'],
+    });
+
+    // Broadcast new ticket to all connected admins
+    if (ticketWithUser) {
+      this.supportGateway.broadcastNewTicket(ticketWithUser);
+    }
+
     this.logger.log(`New support ticket created by user ${userId}: ${subject}`);
     return savedTicket;
   }
