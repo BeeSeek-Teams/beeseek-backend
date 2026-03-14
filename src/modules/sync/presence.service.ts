@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserPresence, UserStatus } from '../../entities/user-presence.entity';
+import { User } from '../../entities/user.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { RedisService } from '../redis/redis.service';
 
@@ -13,6 +14,8 @@ export class PresenceService {
   constructor(
     @InjectRepository(UserPresence)
     private presenceRepository: Repository<UserPresence>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
     private readonly redisService: RedisService,
   ) {}
 
@@ -40,6 +43,16 @@ export class PresenceService {
 
     if (needsDbSync) {
       try {
+        // Check if user exists before attempting to save presence
+        const userExists = await this.userRepository.findOne({
+          where: { id: userId },
+        });
+        
+        if (!userExists) {
+          this.logger.warn(`User ${userId} not found, skipping presence sync`);
+          return presenceData;
+        }
+
         let presence = await this.presenceRepository.findOne({
           where: { userId },
         });
