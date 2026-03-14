@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SupportTicket } from '../../entities/support-ticket.entity';
 import { SupportMessage } from '../../entities/support-message.entity';
+import { User } from '../../entities/user.entity';
 import { SupportService } from './support.service';
 import { SupportController } from './support.controller';
 import { SupportGateway } from './support.gateway';
@@ -11,7 +12,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([SupportTicket, SupportMessage]),
+    TypeOrmModule.forFeature([SupportTicket, SupportMessage, User]),
     AuthModule,
     MailModule,
     NotificationsModule,
