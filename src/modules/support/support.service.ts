@@ -4,7 +4,6 @@ import { Repository } from 'typeorm';
 import { SupportTicket, TicketStatus } from '../../entities/support-ticket.entity';
 import { SupportMessage } from '../../entities/support-message.entity';
 import { User } from '../../entities/user.entity';
-import { NotificationType } from '../../entities/notification.entity';
 import { SupportGateway } from './support.gateway';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -67,7 +66,7 @@ export class SupportService {
         userId,
         'Support Ticket Created',
         `Your ticket has been created. ID: ${savedTicket.id.slice(0, 8).toUpperCase()}`,
-        NotificationType.MESSAGE,
+        'SUPPORT' as any,
         { ticketId: savedTicket.id },
       );
     } catch (err) {
@@ -166,7 +165,7 @@ export class SupportService {
         ticket.userId,
         'Ticket Assigned',
         `Your ticket is now being handled by our support team`,
-        NotificationType.MESSAGE,
+        'SUPPORT' as any,
         { ticketId: ticket.id },
       );
     } catch (err) {
@@ -201,7 +200,7 @@ export class SupportService {
         ticket.userId,
         'Ticket Resolved',
         `Your support ticket has been resolved`,
-        NotificationType.MESSAGE,
+        'SUPPORT' as any,
         { ticketId: ticket.id },
       );
     } catch (err) {
@@ -239,8 +238,12 @@ export class SupportService {
 
     if (!fullMessage) throw new NotFoundException('Message not found after save');
 
-    // Broadcast real-time message
-    this.supportGateway.broadcastToTicket(ticketId, 'newSupportMessage', fullMessage);
+    // Broadcast real-time message with explicit ticketId (TypeORM may not serialize implicit FK)
+    const broadcastPayload = {
+      ...fullMessage,
+      ticketId,
+    };
+    this.supportGateway.broadcastToTicket(ticketId, 'newSupportMessage', broadcastPayload);
 
     // Send notifications for new messages from support team
     if (isFromSupport) {
@@ -262,7 +265,7 @@ export class SupportService {
           ticket.userId,
           'New Message on Your Ticket',
           text.slice(0, 80),
-          NotificationType.MESSAGE,
+          'SUPPORT' as any,
           { ticketId: ticket.id },
         );
       } catch (err) {

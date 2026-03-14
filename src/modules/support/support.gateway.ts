@@ -79,7 +79,7 @@ export class SupportGateway implements OnGatewayConnection, OnGatewayDisconnect 
     if (!userId) return { event: 'error', message: 'Not authenticated' };
 
     // Admins can join any ticket; users can only join their own
-    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'MODERATOR'].includes(userRole);
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'MODERATOR', 'SUPPORT'].includes(userRole);
     if (!isAdmin) {
       const ticket = await this.ticketRepository.findOne({ where: { id: ticketId } });
       if (!ticket || ticket.userId !== userId) {
