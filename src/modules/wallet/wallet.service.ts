@@ -465,14 +465,26 @@ export class WalletService {
     // 2. Handle successful transaction
     if (body.eventType === 'SUCCESSFUL_TRANSACTION') {
       const data = body.eventData;
+      
+      // Log full webhook payload to understand structure
+      this.logger.log(`Webhook eventData: ${JSON.stringify(data, null, 2)}`);
+      
       const amountKobo = Math.round(data.amountPaid * 100);
-      const nuban = data.destinationAccountDetails?.accountNumber;
+      
+      // Try multiple possible field paths for NUBAN
+      let nuban = data.destinationAccountDetails?.accountNumber || 
+                  data.destinationAccountNumber ||
+                  data.accountNumber ||
+                  data.reservedAccountNumber;
+      
       const transactionRef = data.transactionReference;
 
       if (!nuban) {
-        this.logger.warn('Webhook missing destination NUBAN');
+        this.logger.warn(`Webhook missing NUBAN. Full data: ${JSON.stringify(data)}`);
         return { status: 'ignored' };
       }
+
+      this.logger.log(`Looking for user with NUBAN: ${nuban}`);
 
       // 3. Find User by NUBAN
       const user = await this.userRepository.findOne({
