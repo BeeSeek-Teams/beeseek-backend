@@ -13,6 +13,7 @@ import { Message } from '../../entities/message.entity';
 import { User, UserStatus } from '../../entities/user.entity';
 import { ChatGateway } from './chat.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../../entities/notification.entity';
 
 @Injectable()
 export class ChatService {
@@ -227,6 +228,26 @@ export class ChatService {
     // Emit global unread count update for both users (for the Bell icon etc)
     this.emitUnreadCountUpdate(room.participant1Id);
     this.emitUnreadCountUpdate(room.participant2Id);
+
+    // Create internal notification for the recipient
+    if (fullMessage?.sender) {
+      const senderName = `${fullMessage.sender.firstName} ${fullMessage.sender.lastName}`;
+      try {
+        await this.notificationsService.createInternal(
+          recipientId,
+          senderName,
+          previewText,
+          NotificationType.MESSAGE,
+          {
+            type: 'CHAT_MESSAGE',
+            roomId: roomId,
+            senderId: senderId,
+          }
+        );
+      } catch (err) {
+        this.logger.warn(`Failed to create notification for chat message: ${err.message}`);
+      }
+    }
 
     // Push Notification if recipient is not in room
     if (!isRecipientInRoom) {
