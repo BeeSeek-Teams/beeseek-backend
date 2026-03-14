@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { SupportTicket, TicketStatus } from '../../entities/support-ticket.entity';
 import { SupportMessage } from '../../entities/support-message.entity';
 import { User } from '../../entities/user.entity';
+import { NotificationType } from '../../entities/notification.entity';
 import { SupportGateway } from './support.gateway';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -66,7 +67,7 @@ export class SupportService {
         userId,
         'Support Ticket Created',
         `Your ticket has been created. ID: ${savedTicket.id.slice(0, 8).toUpperCase()}`,
-        'SUPPORT' as any,
+        NotificationType.MESSAGE,
         { ticketId: savedTicket.id },
       );
     } catch (err) {
@@ -165,7 +166,7 @@ export class SupportService {
         ticket.userId,
         'Ticket Assigned',
         `Your ticket is now being handled by our support team`,
-        'SUPPORT' as any,
+        NotificationType.MESSAGE,
         { ticketId: ticket.id },
       );
     } catch (err) {
@@ -200,7 +201,7 @@ export class SupportService {
         ticket.userId,
         'Ticket Resolved',
         `Your support ticket has been resolved`,
-        'SUPPORT' as any,
+        NotificationType.MESSAGE,
         { ticketId: ticket.id },
       );
     } catch (err) {
@@ -261,7 +262,7 @@ export class SupportService {
           ticket.userId,
           'New Message on Your Ticket',
           text.slice(0, 80),
-          'SUPPORT' as any,
+          NotificationType.MESSAGE,
           { ticketId: ticket.id },
         );
       } catch (err) {
