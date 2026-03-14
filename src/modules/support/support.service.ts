@@ -182,6 +182,13 @@ export class SupportService {
     ticket.status = TicketStatus.RESOLVED;
     const updatedTicket = await this.ticketRepository.save(ticket);
 
+    // Broadcast status change to all connected users on this ticket in realtime
+    this.supportGateway.broadcastToTicket(ticketId, 'ticketStatusChanged', {
+      ticketId,
+      status: TicketStatus.RESOLVED,
+      updatedAt: updatedTicket.updatedAt,
+    });
+
     // Send resolution email to user
     try {
       await this.mailService.sendSupportTicketResolved(
