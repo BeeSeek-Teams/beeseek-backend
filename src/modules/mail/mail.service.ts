@@ -422,4 +422,97 @@ export class MailService implements OnModuleInit {
     `);
     return this.sendMail(to, 'NIN Verification Update - BeeSeek', html);
   }
+
+  async sendSupportTicketCreated(to: string, name: string, ticketId: string, subject: string) {
+    const html = this.wrapTemplate(`
+      <h1 style="font-size: 24px; font-weight: 700; margin: 0 0 16px 0; color: #031745;">Support Ticket Created</h1>
+      <p style="font-size: 16px; line-height: 1.5; color: #4B5563; margin: 0 0 24px 0;">
+        Hello ${name},<br><br>
+        Your support ticket has been successfully created. Our support team will review your case and respond within 24 hours.
+      </p>
+
+      <div style="background-color: #F8F9FA; border-radius: 12px; padding: 24px; margin-bottom: 24px; border: 1px solid #E5E5E5;">
+        <p style="color: #6B7280; margin: 0; font-size: 14px;">Ticket ID</p>
+        <p style="color: #031745; margin: 4px 0 0 0; font-weight: 700; font-size: 16px;">${ticketId.slice(0, 8).toUpperCase()}</p>
+        <p style="color: #6B7280; margin: 16px 0 0 0; font-size: 14px;">Subject</p>
+        <p style="color: #031745; margin: 4px 0 0 0; font-weight: 600;">${subject}</p>
+      </div>
+
+      <p style="font-size: 14px; color: #6B7280; line-height: 1.6; margin: 0;">
+        You can track your ticket status in the app or by replying to this email. Your support ticket is important to us and we are committed to a swift resolution.
+      </p>
+    `);
+
+    return this.sendMail(to, `Support Ticket #${ticketId.slice(0, 8).toUpperCase()} Created`, html);
+  }
+
+  async sendSupportTicketAssigned(to: string, name: string, ticketId: string, subject: string, agentName: string) {
+    const html = this.wrapTemplate(`
+      <h1 style="font-size: 24px; font-weight: 700; margin: 0 0 16px 0; color: #031745;">Your Ticket Has Been Assigned</h1>
+      <p style="font-size: 16px; line-height: 1.5; color: #4B5563; margin: 0 0 24px 0;">
+        Hello ${name},<br><br>
+        A support specialist has been assigned to your ticket and will be responding shortly.
+      </p>
+
+      <div style="background-color: #F8F9FA; border-radius: 12px; padding: 24px; margin-bottom: 24px; border: 1px solid #E5E5E5;">
+        <p style="color: #6B7280; margin: 0; font-size: 14px;">Ticket ID</p>
+        <p style="color: #031745; margin: 4px 0 0 0; font-weight: 700; font-size: 16px;">${ticketId.slice(0, 8).toUpperCase()}</p>
+        <p style="color: #6B7280; margin: 16px 0 0 0; font-size: 14px;">Assigned Specialist</p>
+        <p style="color: #031745; margin: 4px 0 0 0; font-weight: 600;">${agentName}</p>
+      </div>
+
+      <p style="font-size: 14px; color: #6B7280; margin: 0;">
+        Watch for responses in the app or via email. We are working to resolve your issue as quickly as possible.
+      </p>
+    `);
+
+    return this.sendMail(to, `Ticket #${ticketId.slice(0, 8).toUpperCase()} Assigned to Agent`, html);
+  }
+
+  async sendSupportMessageReceived(to: string, name: string, ticketId: string, messagePreview: string) {
+    const preview = messagePreview.slice(0, 150) + (messagePreview.length > 150 ? '...' : '');
+    const html = this.wrapTemplate(`
+      <h1 style="font-size: 24px; font-weight: 700; margin: 0 0 16px 0; color: #031745;">New Response on Your Ticket</h1>
+      <p style="font-size: 16px; line-height: 1.5; color: #4B5563; margin: 0 0 24px 0;">
+        Hello ${name},<br><br>
+        Our support team has sent you a response on your ticket.
+      </p>
+
+      <div style="background-color: #F8F9FA; border-radius: 12px; padding: 24px; margin-bottom: 24px; border: 1px solid #E5E5E5;">
+        <p style="color: #6B7280; margin: 0; font-size: 14px;">Ticket ID</p>
+        <p style="color: #031745; margin: 4px 0 16px 0; font-weight: 700;">${ticketId.slice(0, 8).toUpperCase()}</p>
+        <p style="color: #6B7280; margin: 0; font-size: 14px;">Message</p>
+        <p style="color: #031745; margin: 4px 0 0 0; font-size: 14px; line-height: 1.5; padding-left: 12px; border-left: 3px solid #031745;">${preview}</p>
+      </div>
+
+      <p style="font-size: 14px; color: #6B7280; margin: 0;">
+        Log into the BeeSeek app to view the complete message and respond to your support ticket.
+      </p>
+    `);
+
+    return this.sendMail(to, `New Response on Ticket #${ticketId.slice(0, 8).toUpperCase()}`, html);
+  }
+
+  async sendSupportTicketResolved(to: string, name: string, ticketId: string, subject: string) {
+    const html = this.wrapTemplate(`
+      <h1 style="font-size: 24px; font-weight: 700; margin: 0 0 16px 0; color: #031745;">Support Ticket Resolved</h1>
+      <p style="font-size: 16px; line-height: 1.5; color: #4B5563; margin: 0 0 24px 0;">
+        Hello ${name},<br><br>
+        Your support ticket has been marked as resolved. We appreciate your patience and feedback.
+      </p>
+
+      <div style="background-color: #F8F9FA; border-radius: 12px; padding: 24px; margin-bottom: 24px; border: 1px solid #E5E5E5;">
+        <p style="color: #6B7280; margin: 0; font-size: 14px;">Ticket ID</p>
+        <p style="color: #031745; margin: 4px 0 0 0; font-weight: 700; font-size: 16px;">${ticketId.slice(0, 8).toUpperCase()}</p>
+        <p style="color: #6B7280; margin: 16px 0 0 0; font-size: 14px;">Subject</p>
+        <p style="color: #031745; margin: 4px 0 0 0;">${subject}</p>
+      </div>
+
+      <p style="font-size: 14px; color: #6B7280; line-height: 1.6; margin: 0;">
+        If you have additional issues or need further assistance, you can open a new ticket anytime. Thank you for being part of the BeeSeek community.
+      </p>
+    `);
+
+    return this.sendMail(to, `Ticket #${ticketId.slice(0, 8).toUpperCase()} Resolved`, html);
+  }
 }

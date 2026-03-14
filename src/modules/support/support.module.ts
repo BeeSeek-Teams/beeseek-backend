@@ -6,11 +6,15 @@ import { SupportService } from './support.service';
 import { SupportController } from './support.controller';
 import { SupportGateway } from './support.gateway';
 import { AuthModule } from '../auth/auth.module';
+import { MailModule } from '../mail/mail.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([SupportTicket, SupportMessage]),
     AuthModule,
+    MailModule,
+    NotificationsModule,
   ],
   controllers: [SupportController],
   providers: [SupportService, SupportGateway],
