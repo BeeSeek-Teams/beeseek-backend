@@ -33,7 +33,7 @@ export class SupportMessage {
   @Column({ nullable: true })
   adminId: string;
 
-  @ManyToOne(() => Administrator, { nullable: true })
+  @ManyToOne(() => Administrator, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'adminId' })
   adminSender: Administrator;
 

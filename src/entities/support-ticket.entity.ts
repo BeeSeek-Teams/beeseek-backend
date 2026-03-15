@@ -52,7 +52,7 @@ export class SupportTicket {
   @Column({ nullable: true })
   assignedAdminId: string;
 
-  @ManyToOne(() => Administrator, { nullable: true })
+  @ManyToOne(() => Administrator, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'assignedAdminId' })
   assignedAdmin: Administrator;
 
