@@ -20,7 +20,7 @@ export default new DataSource({
   password: process.env.DB_PASSWORD || 'dev_password',
   database: process.env.DB_NAME || 'beeseek_db',
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
-  migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
+  migrations: [__dirname + '/../migrations/*{.ts,.js}'],
   synchronize: false,
   logging: true,
 });

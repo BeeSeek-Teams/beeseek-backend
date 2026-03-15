@@ -27,20 +27,21 @@ export class NotificationsService {
   private initializeFirebase() {
     if (admin.apps.length === 0) {
       try {
-        const projectId = this.configService.get<string>('FIREBASE_PROJECT_ID');
-        const privateKey = this.configService.get<string>('FIREBASE_PRIVATE_KEY');
-        const clientEmail = this.configService.get<string>('FIREBASE_CLIENT_EMAIL');
+        // Try ConfigService first, fall back to process.env directly
+        const projectId = this.configService.get<string>('FIREBASE_PROJECT_ID') || process.env.FIREBASE_PROJECT_ID;
+        const privateKey = this.configService.get<string>('FIREBASE_PRIVATE_KEY') || process.env.FIREBASE_PRIVATE_KEY;
+        const clientEmail = this.configService.get<string>('FIREBASE_CLIENT_EMAIL') || process.env.FIREBASE_CLIENT_EMAIL;
 
         if (!projectId || !privateKey || !clientEmail) {
-          this.logger.warn('Firebase credentials missing from .env. FCM will not work.');
+          this.logger.warn(`Firebase credentials missing. projectId=${!!projectId}, privateKey=${!!privateKey}, clientEmail=${!!clientEmail}`);
           return;
         }
 
         admin.initializeApp({
           credential: admin.credential.cert({
-            projectId,
-            privateKey: privateKey.replace(/\\n/g, '\n'),
-            clientEmail,
+            projectId: projectId.replace(/"/g, ''),
+            privateKey: privateKey.replace(/"/g, '').replace(/\\n/g, '\n'),
+            clientEmail: clientEmail.replace(/"/g, ''),
           } as Partial<admin.ServiceAccount>),
         });
         this.logger.log('Firebase Admin SDK initialized successfully');

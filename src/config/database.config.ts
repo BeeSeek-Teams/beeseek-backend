@@ -39,7 +39,7 @@ export const databaseConfig: TypeOrmModuleOptions = {
   database: urlConfig?.database || process.env.DB_NAME || 'beeseek_db',
   ssl: urlConfig?.ssl || false,
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
-  migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
+  migrations: [__dirname + '/../migrations/*{.ts,.js}'],
   // Auto-sync entities in development, or when DB_SYNCHRONIZE=true (for initial production deploy).
   synchronize: process.env.DB_SYNCHRONIZE === 'true' || process.env.NODE_ENV !== 'production',
   // Only log SQL in non-production environments to avoid I/O overhead & data leakage in logs.
