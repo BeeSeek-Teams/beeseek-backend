@@ -74,6 +74,12 @@ export class ChatService {
         throw new BadRequestException('Cannot chat with yourself');
       }
 
+      // Validate the calling user exists in the users table (not just in JWT/admins)
+      const callingUser = await this.userRepository.findOne({ where: { id: userId } });
+      if (!callingUser) {
+        throw new BadRequestException('Your user account was not found. Please log out and log back in.');
+      }
+
       // Check if target user is active
       const targetUser = await this.userRepository.findOne({ where: { id: targetId } });
       if (!targetUser || targetUser.status === UserStatus.DEACTIVATED || targetUser.isDeleted) {
