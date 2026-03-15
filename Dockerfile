@@ -58,9 +58,8 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Copy compiled output from builder
 COPY --from=builder /app/dist ./dist
 
-# Copy source + migrations for TypeORM CLI (migration:run, migration:revert)
+# Copy source for TypeORM CLI (migrations now live in src/migrations/)
 COPY --from=builder /app/src ./src
-COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 COPY --from=builder /app/node_modules/ts-node ./node_modules/ts-node
 COPY --from=builder /app/node_modules/typescript ./node_modules/typescript
