@@ -210,42 +210,7 @@ export class AuthService {
     const { email, password, deviceId, deviceType, deviceModel, latitude, longitude } =
       loginDto;
 
-    // First try finding in administrators (dedicated staff table)
-    const admin = await this.adminRepository.findOne({
-      where: { email },
-      select: ['id', 'email', 'firstName', 'lastName', 'hashedPassword', 'role', 'status'],
-    });
-
-    if (admin) {
-      if (admin.status === AdminStatus.INACTIVE) {
-        throw new UnauthorizedException('This administrative node is inactive');
-      }
-
-      const isPasswordValid = await bcrypt.compare(password, admin.hashedPassword);
-      if (!isPasswordValid) throw new UnauthorizedException('Invalid email or password');
-
-      await this.adminRepository.update(admin.id, { lastLoginAt: new Date() });
-      
-      this.logger.log(`[AUTH] Administrator logged in: ${admin.id} (${admin.role})`);
-      
-      // Return basic auth response for administrators
-      const { access_token, refresh_token } = this.generateTokens(admin);
-      return {
-        access_token,
-        refresh_token,
-        user: {
-          id: admin.id,
-          email: admin.email,
-          firstName: admin.firstName,
-          lastName: admin.lastName,
-          role: admin.role,
-          isVerified: true,
-          age: 0,
-        } as any
-      };
-    }
-
-    // Then try finding in standard users
+    // Check standard users table first (mobile apps always use this)
     const user = await this.usersRepository.findOne({
       where: { email },
       select: [
@@ -282,57 +247,95 @@ export class AuthService {
       ],
     });
 
-    if (!user || !user.hashedPassword) {
-      throw new UnauthorizedException('Invalid email or password');
+    if (user) {
+      if (!user.hashedPassword) {
+        throw new UnauthorizedException('Invalid email or password');
+      }
+
+      if (user.isDeleted) {
+        throw new UnauthorizedException('This account has been closed and permanently removed. Contact support for further assistance.');
+      }
+
+      if (user.status === UserStatus.DEACTIVATED) {
+        throw new UnauthorizedException('Your account is currently deactivated. Please contact support@beeseek.site to restore access.');
+      }
+
+      if (user.authProvider !== AuthProvider.EMAIL) {
+        throw new BadRequestException(
+          `This account uses ${user.authProvider} sign-in. Please use that method.`,
+        );
+      }
+
+      // Verify password
+      const isPasswordValid = await bcrypt.compare(password, user.hashedPassword);
+      if (!isPasswordValid) {
+        throw new UnauthorizedException('Invalid email or password');
+      }
+
+      // Ensure user has a slug (for existing users)
+      if (!user.slug) {
+        user.slug = await this.generateUniqueSlug(user.firstName, user.lastName);
+        await this.usersRepository.update(user.id, { slug: user.slug });
+      }
+
+      // Update last login and device info
+      const updateData: any = {
+        lastLoginAt: new Date(),
+        lastIpAddress: ipAddress || user.lastIpAddress,
+        deviceId: deviceId || user.deviceId,
+        deviceType: deviceType || user.deviceType,
+        deviceModel: deviceModel || user.deviceModel,
+        latitude: latitude || user.latitude,
+        longitude: longitude || user.longitude,
+      };
+      if (user.role === UserRole.CLIENT) {
+        updateData.lastClientLoginAt = new Date();
+      } else if (user.role === UserRole.AGENT) {
+        updateData.lastAgentLoginAt = new Date();
+      }
+      await this.usersRepository.update(user.id, updateData);
+
+      this.logger.log(`User logged in: ${user.id} (${user.role})`);
+
+      return this.generateAuthResponse(user);
     }
 
-    if (user.isDeleted) {
-      throw new UnauthorizedException('This account has been closed and permanently removed. Contact support for further assistance.');
+    // Fall back to administrators table (for admin panel login via API)
+    const admin = await this.adminRepository.findOne({
+      where: { email },
+      select: ['id', 'email', 'firstName', 'lastName', 'hashedPassword', 'role', 'status'],
+    });
+
+    if (admin) {
+      if (admin.status === AdminStatus.INACTIVE) {
+        throw new UnauthorizedException('This administrative node is inactive');
+      }
+
+      const isPasswordValid = await bcrypt.compare(password, admin.hashedPassword);
+      if (!isPasswordValid) throw new UnauthorizedException('Invalid email or password');
+
+      await this.adminRepository.update(admin.id, { lastLoginAt: new Date() });
+      
+      this.logger.log(`[AUTH] Administrator logged in: ${admin.id} (${admin.role})`);
+      
+      // Return basic auth response for administrators
+      const { access_token, refresh_token } = this.generateTokens(admin);
+      return {
+        access_token,
+        refresh_token,
+        user: {
+          id: admin.id,
+          email: admin.email,
+          firstName: admin.firstName,
+          lastName: admin.lastName,
+          role: admin.role,
+          isVerified: true,
+          age: 0,
+        } as any
+      };
     }
 
-    if (user.status === UserStatus.DEACTIVATED) {
-      throw new UnauthorizedException('Your account is currently deactivated. Please contact support@beeseek.site to restore access.');
-    }
-
-    if (user.authProvider !== AuthProvider.EMAIL) {
-      throw new BadRequestException(
-        `This account uses ${user.authProvider} sign-in. Please use that method.`,
-      );
-    }
-
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.hashedPassword);
-
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid email or password');
-    }
-
-    // Ensure user has a slug (for existing users)
-    if (!user.slug) {
-      user.slug = await this.generateUniqueSlug(user.firstName, user.lastName);
-      await this.usersRepository.update(user.id, { slug: user.slug });
-    }
-
-    // Update last login and device info
-    const updateData: any = {
-      lastLoginAt: new Date(),
-      lastIpAddress: ipAddress || user.lastIpAddress,
-      deviceId: deviceId || user.deviceId,
-      deviceType: deviceType || user.deviceType,
-      deviceModel: deviceModel || user.deviceModel,
-      latitude: latitude || user.latitude,
-      longitude: longitude || user.longitude,
-    };
-    if (user.role === UserRole.CLIENT) {
-      updateData.lastClientLoginAt = new Date();
-    } else if (user.role === UserRole.AGENT) {
-      updateData.lastAgentLoginAt = new Date();
-    }
-    await this.usersRepository.update(user.id, updateData);
-
-    this.logger.log(`User logged in: ${user.id} (${user.role})`);
-
-    return this.generateAuthResponse(user);
+    throw new UnauthorizedException('Invalid email or password');
   }
 
   /**
