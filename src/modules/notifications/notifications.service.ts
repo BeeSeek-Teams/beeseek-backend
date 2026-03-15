@@ -29,18 +29,24 @@ export class NotificationsService {
       try {
         // Try ConfigService first, fall back to process.env directly
         const projectId = this.configService.get<string>('FIREBASE_PROJECT_ID') || process.env.FIREBASE_PROJECT_ID;
-        const privateKey = this.configService.get<string>('FIREBASE_PRIVATE_KEY') || process.env.FIREBASE_PRIVATE_KEY;
+        const rawPrivateKey = this.configService.get<string>('FIREBASE_PRIVATE_KEY') || process.env.FIREBASE_PRIVATE_KEY;
         const clientEmail = this.configService.get<string>('FIREBASE_CLIENT_EMAIL') || process.env.FIREBASE_CLIENT_EMAIL;
 
-        if (!projectId || !privateKey || !clientEmail) {
-          this.logger.warn(`Firebase credentials missing. projectId=${!!projectId}, privateKey=${!!privateKey}, clientEmail=${!!clientEmail}`);
+        if (!projectId || !rawPrivateKey || !clientEmail) {
+          this.logger.warn(`Firebase credentials missing. projectId=${!!projectId}, privateKey=${!!rawPrivateKey}, clientEmail=${!!clientEmail}`);
           return;
         }
+
+        // Clean the private key:
+        // 1. Strip surrounding quotes
+        // 2. Replace literal \n escape sequences with real newlines
+        // 3. Reconstruct valid PEM from the base64 content
+        const privateKey = this.cleanPrivateKey(rawPrivateKey);
 
         admin.initializeApp({
           credential: admin.credential.cert({
             projectId: projectId.replace(/"/g, ''),
-            privateKey: privateKey.replace(/"/g, '').replace(/\\n/g, '\n'),
+            privateKey,
             clientEmail: clientEmail.replace(/"/g, ''),
           } as Partial<admin.ServiceAccount>),
         });
@@ -49,6 +55,41 @@ export class NotificationsService {
         this.logger.error('Failed to initialize Firebase Admin SDK', error.stack);
       }
     }
+  }
+
+  /**
+   * Cleans and reconstructs a PEM private key from potentially corrupted env var.
+   * Handles: quoted values, \n escape sequences, real newlines, stray backslashes.
+   */
+  private cleanPrivateKey(raw: string): string {
+    // Strip surrounding quotes
+    let key = raw.replace(/^["']|["']$/g, '');
+
+    // Replace literal \n escape sequences with real newlines
+    key = key.replace(/\\n/g, '\n');
+
+    // Extract the base64 content between PEM headers
+    const pemHeader = '-----BEGIN PRIVATE KEY-----';
+    const pemFooter = '-----END PRIVATE KEY-----';
+    const headerIdx = key.indexOf(pemHeader);
+    const footerIdx = key.indexOf(pemFooter);
+
+    if (headerIdx === -1 || footerIdx === -1) {
+      this.logger.error('PEM header/footer not found in private key');
+      return key;
+    }
+
+    const base64Content = key.substring(headerIdx + pemHeader.length, footerIdx);
+
+    // Remove all whitespace and any stray backslashes from base64 body
+    const cleanBase64 = base64Content.replace(/[\s\\]/g, '');
+
+    // Reconstruct proper PEM with 64-char lines
+    const lines = cleanBase64.match(/.{1,64}/g) || [];
+    const reconstructed = `${pemHeader}\n${lines.join('\n')}\n${pemFooter}\n`;
+
+    this.logger.log(`PEM key cleaned: ${cleanBase64.length} base64 chars, ${lines.length} lines`);
+    return reconstructed;
   }
 
   /**
