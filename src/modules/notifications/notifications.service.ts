@@ -113,6 +113,15 @@ export class NotificationsService {
     };
 
     try {
+      // Re-initialize Firebase if it wasn't ready at startup
+      if (admin.apps.length === 0) {
+        this.logger.warn('Firebase not initialized, attempting re-initialization...');
+        this.initializeFirebase();
+        if (admin.apps.length === 0) {
+          this.logger.error('Firebase re-initialization failed. Cannot send push.');
+          return;
+        }
+      }
       await admin.messaging().send(message);
       this.logger.log(`Push notification sent to user ${userId}`);
     } catch (error) {
