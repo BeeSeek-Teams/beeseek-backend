@@ -75,19 +75,17 @@ async function bootstrap() {
   // Global exception filter
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  // Swagger API documentation (non-production only)
-  if (process.env.NODE_ENV !== 'production') {
-    const swaggerConfig = new DocumentBuilder()
-      .setTitle('BeeSeek API')
-      .setDescription('BeeSeek platform API — connects clients with local service agents')
-      .setVersion('1.0')
-      .addBearerAuth()
-      .addApiKey({ type: 'apiKey', name: 'x-queen-key', in: 'header' }, 'queen-key')
-      .build();
-    const document = SwaggerModule.createDocument(app, swaggerConfig);
-    SwaggerModule.setup('docs', app, document);
-    logger.log('📚 Swagger docs available at /docs');
-  }
+  // Swagger API documentation
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('BeeSeek API')
+    .setDescription('BeeSeek platform API — connects clients with local service agents')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .addApiKey({ type: 'apiKey', name: 'x-queen-key', in: 'header' }, 'queen-key')
+    .build();
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('docs', app, document);
+  logger.log('📚 Swagger docs available at /docs');
 
   const port = process.env.PORT || 3000;
   await app.listen(port, '0.0.0.0');
