@@ -110,13 +110,14 @@ export class ContractsController {
   async payForContract(
     @CurrentUser() user: User,
     @Param('id') contractId: string,
-    @Body() body: { roomId: string; pin: string },
+    @Body() body: { roomId: string; pin: string; idempotencyKey?: string },
   ) {
     return this.contractsService.payForContract(
       user.id,
       contractId,
       body.roomId,
       body.pin,
+      body.idempotencyKey,
     );
   }
 
@@ -124,12 +125,13 @@ export class ContractsController {
   async completeContract(
     @CurrentUser() user: User,
     @Param('id') contractId: string,
-    @Body() body: { pin: string },
+    @Body() body: { pin: string; idempotencyKey?: string },
   ) {
     return this.contractsService.completeContract(
       user.id,
       contractId,
       body.pin,
+      body.idempotencyKey,
     );
   }
 

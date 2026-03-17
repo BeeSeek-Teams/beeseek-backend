@@ -26,6 +26,7 @@ import {
 import { SecurityService } from '../security/security.service';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { RedisService } from '../redis/redis.service';
 import dayjs from 'dayjs';
 
 @Injectable()
@@ -47,6 +48,7 @@ export class ContractsService {
     private mailService: MailService,
     private dataSource: DataSource,
     private notificationsService: NotificationsService,
+    private redisService: RedisService,
   ) {}
 
   async createRequest(
@@ -339,8 +341,32 @@ export class ContractsService {
     contractId: string,
     roomId: string,
     pin: string,
+    idempotencyKey?: string,
   ) {
-    // 0. Verify Transaction PIN BEFORE entering DB transaction (Redis + 1 read)
+    // 0a. Idempotency check — if client retries with same key, return cached result
+    const idemKey = idempotencyKey ? `idempotency:pay:${idempotencyKey}` : null;
+    if (idemKey) {
+      const cached = await this.redisService.get(idemKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        // If still processing, the first request is in-flight — tell client to wait
+        if (parsed.status === 'processing') {
+          // Return the contract's current state so client can reconcile
+          const currentContract = await this.getContract(contractId);
+          return { success: true, contract: currentContract, idempotent: true };
+        }
+        return parsed.result;
+      }
+      // Atomically claim this key — only one request wins
+      const acquired = await this.redisService.setNX(idemKey, JSON.stringify({ status: 'processing' }), 300); // 5 min TTL for processing
+      if (!acquired) {
+        // Another request just claimed it — return current state
+        const currentContract = await this.getContract(contractId);
+        return { success: true, contract: currentContract, idempotent: true };
+      }
+    }
+
+    // 0b. Verify Transaction PIN BEFORE entering DB transaction (Redis + 1 read)
     await this.securityService.verifyTransactionPin(clientId, pin);
 
     // === CRITICAL TRANSACTION: Only financial mutations that MUST be atomic ===
@@ -536,7 +562,16 @@ export class ContractsService {
 
     // Return immediately — don't wait for side effects
     const finalContract = await this.getContract(contractId);
-    return { success: true, contract: finalContract };
+    const response = { success: true, contract: finalContract };
+
+    // Cache the successful result for 24 hours so duplicate requests get the same response
+    if (idemKey) {
+      this.redisService.set(idemKey, JSON.stringify({ status: 'done', result: response }), 86400).catch((err) => {
+        this.logger.warn(`Failed to cache idempotency result: ${err.message}`);
+      });
+    }
+
+    return response;
   }
 
   async getBusySlots(agentId: string, date: string) {
@@ -557,7 +592,26 @@ export class ContractsService {
     return contracts.map((c) => c.startTime);
   }
 
-  async completeContract(clientId: string, contractId: string, pin: string) {
+  async completeContract(clientId: string, contractId: string, pin: string, idempotencyKey?: string) {
+    // 0. Idempotency check
+    const idemKey = idempotencyKey ? `idempotency:complete:${idempotencyKey}` : null;
+    if (idemKey) {
+      const cached = await this.redisService.get(idemKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.status === 'processing') {
+          const currentContract = await this.getContract(contractId);
+          return currentContract;
+        }
+        return parsed.result;
+      }
+      const acquired = await this.redisService.setNX(idemKey, JSON.stringify({ status: 'processing' }), 300);
+      if (!acquired) {
+        const currentContract = await this.getContract(contractId);
+        return currentContract;
+      }
+    }
+
     // 1. Verify PIN
     await this.securityService.verifyTransactionPin(clientId, pin);
 
@@ -572,6 +626,13 @@ export class ContractsService {
       });
     } catch (error) {
       // Logged by MailService internally
+    }
+
+    // Cache successful result for 24 hours
+    if (idemKey) {
+      this.redisService.set(idemKey, JSON.stringify({ status: 'done', result: result.contract }), 86400).catch((err) => {
+        this.logger.warn(`Failed to cache idempotency result: ${err.message}`);
+      });
     }
 
     return result.contract;
