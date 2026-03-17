@@ -406,10 +406,11 @@ export class MonnifyService {
 
       return { transactionReference };
     } catch (error) {
+      const monnifyError = error.response?.data?.responseMessage || error.response?.data || error.message;
       this.logger.error(
-        `Transfer failed for account ${accountReference}`,
-        error,
+        `Transfer failed for account ${accountReference} | Source: ${accountReference || process.env.MONNIFY_SOURCE_ACCOUNT} | Dest: ${destinationBankCode}/${destinationAccountNumber} | Amount: ${amount}`,
       );
+      this.logger.error(`Monnify response: ${JSON.stringify(monnifyError)}`);
       throw new HttpException(
         'Transfer failed. Please try again later.',
         HttpStatus.BAD_REQUEST,
