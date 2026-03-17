@@ -84,7 +84,8 @@ Please check on them immediately.`;
         from: this.termiiSenderId,
         sms: message,
         type: 'plain',
-        channel: 'generic',
+        // 'generic' requires an approved sender ID; 'dnd' uses a shared route that bypasses DND and works without approval
+        channel: 'dnd',
       };
 
       const response = await axios.post(
