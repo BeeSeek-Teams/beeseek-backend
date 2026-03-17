@@ -28,6 +28,7 @@ import { HealthModule } from './modules/health/health.module';
 import { IncidentsModule } from './modules/incidents/incidents.module';
 import { PromotionsModule } from './modules/promotions/promotions.module';
 import { SystemConfigModule } from './modules/system-config/system-config.module';
+import { FinanceModule } from './modules/finance/finance.module';
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { SystemConfigModule } from './modules/system-config/system-config.module
     NotificationsModule,
     SupportModule,
     PromotionsModule,
+    FinanceModule,
   ],
   controllers: [AppController],
   providers: [
