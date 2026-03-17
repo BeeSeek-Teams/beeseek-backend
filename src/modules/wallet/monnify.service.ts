@@ -381,6 +381,8 @@ export class MonnifyService {
         throw new Error('No source account specified for disbursement');
       }
 
+      this.logger.log(`Initiating transfer: Source=${sourceAccount} Dest=${destinationBankCode}/${destinationAccountNumber} Amount=₦${amount} Ref=${transactionReference}`);
+
       const response = await this.axiosInstance.post(
         '/api/v2/disbursements/single',
         {
@@ -400,19 +402,95 @@ export class MonnifyService {
         },
       );
 
+      this.logger.log(`Monnify transfer response: ${JSON.stringify(response.data)}`);
+
       if (!response.data.requestSuccessful) {
         throw new Error(`Transfer failed: ${response.data.responseMessage}`);
       }
 
-      return { transactionReference };
+      const body = response.data.responseBody;
+
+      // Handle 2FA — transfer needs OTP authorization
+      if (body?.status === 'PENDING_AUTHORIZATION') {
+        this.logger.warn(`Transfer ${transactionReference} requires OTP authorization (2FA enabled)`);
+        return { 
+          transactionReference, 
+          status: 'PENDING_AUTHORIZATION',
+          requiresOtp: true 
+        };
+      }
+
+      return { transactionReference, status: body?.status || 'SUCCESS', requiresOtp: false };
     } catch (error) {
       const monnifyError = error.response?.data?.responseMessage || error.response?.data || error.message;
       this.logger.error(
-        `Transfer failed for account ${accountReference} | Source: ${accountReference || process.env.MONNIFY_SOURCE_ACCOUNT} | Dest: ${destinationBankCode}/${destinationAccountNumber} | Amount: ${amount}`,
+        `Transfer failed | Source: ${accountReference || process.env.MONNIFY_SOURCE_ACCOUNT} | Dest: ${destinationBankCode}/${destinationAccountNumber} | Amount: ₦${amount}`,
       );
-      this.logger.error(`Monnify response: ${JSON.stringify(monnifyError)}`);
+      this.logger.error(`Monnify error details: ${JSON.stringify(error.response?.data || error.message)}`);
       throw new HttpException(
-        'Transfer failed. Please try again later.',
+        `Transfer failed: ${typeof monnifyError === 'string' ? monnifyError : 'Please try again later.'}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  /**
+   * Get Monnify disbursement wallet balance
+   */
+  async getWalletBalance(): Promise<{ availableBalance: string; ledgerBalance: string }> {
+    try {
+      const token = await this.getValidToken();
+      const accountNumber = process.env.MONNIFY_SOURCE_ACCOUNT;
+
+      const response = await this.axiosInstance.get(
+        '/api/v2/disbursements/wallet-balance',
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { accountNumber },
+        },
+      );
+
+      if (!response.data.requestSuccessful) {
+        throw new Error(`Monnify Error: ${response.data.responseMessage}`);
+      }
+
+      return response.data.responseBody;
+    } catch (error) {
+      const msg = error.response?.data?.responseMessage || error.message;
+      this.logger.error(`Failed to fetch wallet balance: ${msg}`);
+      throw new HttpException(
+        `Unable to fetch wallet balance: ${msg}`,
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+  }
+
+  /**
+   * Validate disbursement OTP (for accounts with 2FA enabled)
+   */
+  async validateTransferOtp(
+    reference: string,
+    authorizationCode: string,
+  ): Promise<any> {
+    try {
+      const token = await this.getValidToken();
+
+      const response = await this.axiosInstance.post(
+        '/api/v2/disbursements/single/validate-otp',
+        { reference, authorizationCode },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      if (!response.data.requestSuccessful) {
+        throw new Error(`OTP validation failed: ${response.data.responseMessage}`);
+      }
+
+      return response.data.responseBody;
+    } catch (error) {
+      const msg = error.response?.data?.responseMessage || error.message;
+      this.logger.error(`OTP validation failed for ${reference}: ${msg}`);
+      throw new HttpException(
+        `OTP validation failed: ${msg}`,
         HttpStatus.BAD_REQUEST,
       );
     }

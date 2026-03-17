@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Delete, Param, Body, UseGuards, Req, Query, Headers, BadRequestException, Header } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { WalletService } from './wallet.service';
+import { MonnifyService } from './monnify.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AdminGuard } from '../../common/guards/admin.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -9,7 +10,10 @@ import { TransactionType, TransactionStatus } from '../../entities/transaction.e
 
 @Controller('wallet')
 export class WalletController {
-  constructor(private readonly walletService: WalletService) {}
+  constructor(
+    private readonly walletService: WalletService,
+    private readonly monnifyService: MonnifyService,
+  ) {}
 
   @Get('balance')
   @UseGuards(JwtAuthGuard)
@@ -48,6 +52,13 @@ export class WalletController {
   @Get('admin/economics')
   getEconomicsStats() {
     return this.walletService.getEconomicsStats();
+  }
+
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Roles(AdminRole.ADMIN, AdminRole.SUPER_ADMIN)
+  @Get('admin/monnify-balance')
+  getMonnifyBalance() {
+    return this.monnifyService.getWalletBalance();
   }
 
   @Get('banks')
