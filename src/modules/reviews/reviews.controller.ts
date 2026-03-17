@@ -6,6 +6,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { AdminRole } from '../../entities/administrator.entity';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '../../entities/user.entity';
+import { FraudAction } from '../../entities/fraud-log.entity';
 
 @Controller('reviews')
 @UseGuards(JwtAuthGuard)
@@ -39,6 +40,20 @@ export class ReviewsController {
     @Body() body: { isFlagged: boolean },
   ) {
     return this.reviewsService.toggleReviewFlag(id, body.isFlagged);
+  }
+
+  @Get('admin/fraud-logs')
+  @UseGuards(AdminGuard)
+  @Roles(AdminRole.ADMIN, AdminRole.SUPER_ADMIN, AdminRole.MODERATOR)
+  async getFraudLogs(
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '10',
+    @Query('action') action?: string,
+  ) {
+    const fraudAction = action && Object.values(FraudAction).includes(action as FraudAction)
+      ? (action as FraudAction)
+      : undefined;
+    return this.reviewsService.getFraudLogs(parseInt(page), parseInt(limit), fraudAction);
   }
 
   @Get('me')

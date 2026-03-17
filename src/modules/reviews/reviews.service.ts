@@ -1,12 +1,15 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Review } from '../../entities/review.entity';
 import { Job, JobStatus } from '../../entities/job.entity';
 import { User } from '../../entities/user.entity';
+import { FraudLog, FraudAction } from '../../entities/fraud-log.entity';
 
 @Injectable()
 export class ReviewsService {
+  private readonly logger = new Logger(ReviewsService.name);
+
   constructor(
     @InjectRepository(Review)
     private reviewRepository: Repository<Review>,
@@ -14,6 +17,8 @@ export class ReviewsService {
     private jobRepository: Repository<Job>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(FraudLog)
+    private fraudLogRepository: Repository<FraudLog>,
   ) {}
 
   async createReview(
@@ -67,9 +72,29 @@ export class ReviewsService {
     // Identity check (BVN/Linked Account)
     if (reviewer && reviewee) {
       if (reviewer.monnifyBVN && reviewee.monnifyBVN && reviewer.monnifyBVN === reviewee.monnifyBVN) {
+        await this.logFraudEvent({
+          jobId: data.jobId,
+          attemptedById: reviewerId,
+          targetUserId: revieweeId,
+          action: FraudAction.BLOCKED,
+          reason: 'Identity Match (BVN)',
+          attemptedRole: reviewerRole,
+          attemptedRating: data.rating,
+          attemptedComment: data.comment,
+        });
         throw new BadRequestException('Security Alert: Review fraud detected (Identity Match)');
       }
       if (reviewer.linkedAccountId === revieweeId || reviewee.linkedAccountId === reviewerId) {
+        await this.logFraudEvent({
+          jobId: data.jobId,
+          attemptedById: reviewerId,
+          targetUserId: revieweeId,
+          action: FraudAction.BLOCKED,
+          reason: 'Linked Account Match',
+          attemptedRole: reviewerRole,
+          attemptedRating: data.rating,
+          attemptedComment: data.comment,
+        });
         throw new BadRequestException('Security Alert: Review fraud detected (Linked Account Match)');
       }
 
@@ -96,6 +121,21 @@ export class ReviewsService {
     });
 
     const savedReview = await this.reviewRepository.save(review);
+
+    // Log flagged reviews to audit trail
+    if (isFlagged) {
+      await this.logFraudEvent({
+        jobId: data.jobId,
+        attemptedById: reviewerId,
+        targetUserId: revieweeId,
+        action: FraudAction.FLAGGED,
+        reason: flagReason!,
+        attemptedRole: reviewerRole,
+        attemptedRating: data.rating,
+        attemptedComment: data.comment,
+        reviewId: savedReview.id,
+      });
+    }
 
     // Update reviewee's average rating (simplified for high performance)
     // We only count reviews that are NOT flagged
@@ -197,5 +237,52 @@ export class ReviewsService {
       where: { jobId },
       relations: ['reviewer'],
     });
+  }
+
+  // ─── Fraud Audit Log ─────────────────────────────────────────
+
+  private async logFraudEvent(data: {
+    jobId: string;
+    attemptedById: string;
+    targetUserId: string;
+    action: FraudAction;
+    reason: string;
+    attemptedRole?: 'CLIENT' | 'AGENT';
+    attemptedRating?: number;
+    attemptedComment?: string;
+    reviewId?: string;
+  }) {
+    try {
+      const log = this.fraudLogRepository.create(data);
+      await this.fraudLogRepository.save(log);
+      this.logger.warn(
+        `Fraud ${data.action}: ${data.reason} | by=${data.attemptedById} target=${data.targetUserId} job=${data.jobId}`,
+      );
+    } catch (err) {
+      // Never let audit logging break the main flow
+      this.logger.error(`Failed to persist fraud log: ${err.message}`);
+    }
+  }
+
+  async getFraudLogs(page: number = 1, limit: number = 10, action?: FraudAction) {
+    const where: any = {};
+    if (action) where.action = action;
+
+    const [items, total] = await this.fraudLogRepository.findAndCount({
+      where,
+      relations: ['attemptedBy', 'targetUser', 'job'],
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    return {
+      items,
+      meta: {
+        total,
+        page,
+        lastPage: Math.ceil(total / limit),
+      },
+    };
   }
 }
