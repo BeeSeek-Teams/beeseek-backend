@@ -368,7 +368,7 @@ export class MonnifyService {
     narration: string,
     destinationBankCode: string,
     destinationAccountNumber: string,
-  ): Promise<{ transactionReference: string }> {
+  ): Promise<{ transactionReference: string; status?: string; requiresOtp?: boolean }> {
     try {
       const token = await this.getValidToken();
 
