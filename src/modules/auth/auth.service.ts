@@ -350,6 +350,7 @@ export class AuthService {
     isVerified: boolean;
     walletCreated: boolean;
     linkedAccountAlsoVerified?: boolean;
+    linkedAccountDetails?: { id: string; name: string; role: string; profileImage: string | null } | null;
   }> {
     const user = await this.usersRepository.findOne({ where: { id: userId } });
 
@@ -362,12 +363,33 @@ export class AuthService {
       throw new BadRequestException('NIN must be 11 digits');
     }
 
+    // Check if this NIN is already used by 2+ accounts (only allow 2 max: CLIENT + AGENT)
+    const allUsersWithNIN = await this.usersRepository.find({
+      where: { ninNumber: verifyNINDto.ninNumber },
+    });
+
+    if (allUsersWithNIN.length >= 2) {
+      // NIN is already used by 2 accounts
+      const isCurrentUserUsingIt = allUsersWithNIN.some((u) => u.id === user.id);
+      const isLinkedAccountUsingIt = allUsersWithNIN.some((u) => u.id === user.linkedAccountId);
+
+      if (!isCurrentUserUsingIt && !isLinkedAccountUsingIt) {
+        // Current user is NOT one of the 2 — this is a 3rd person trying to use the NIN
+        throw new ConflictException(
+          'This NIN is already registered to another person',
+        );
+      }
+      // If current user or linked account is already using it, allow (already verified or re-submitting)
+    }
+
     // Check if this NIN is already verified by a different person
     const otherUserWithNIN = await this.usersRepository.findOne({
       where: {
         ninNumber: verifyNINDto.ninNumber,
       },
     });
+
+    let linkedAccountForResponse: any = null;
 
     if (otherUserWithNIN) {
       const isCurrentUser = otherUserWithNIN.id === user.id;
@@ -387,6 +409,15 @@ export class AuthService {
           otherUserWithNIN.linkedAccountId = user.id;
           await this.usersRepository.save(otherUserWithNIN);
           await this.usersRepository.save(user);
+          
+          // Return linked account info for UI modal
+          linkedAccountForResponse = {
+            id: otherUserWithNIN.id,
+            name: `${otherUserWithNIN.firstName} ${otherUserWithNIN.lastName}`,
+            role: otherUserWithNIN.role,
+            profileImage: otherUserWithNIN.profileImage || null,
+          };
+
           this.logger.log(
             `Auto-linked accounts: ${user.id} (${user.role}) ↔ ${otherUserWithNIN.id} (${otherUserWithNIN.role})`,
           );
@@ -483,9 +514,10 @@ export class AuthService {
       );
 
       return {
-        isVerified: false, // In terms of NIN verification, it's not "Verified" yet
+        isVerified: false,
         walletCreated: true,
         linkedAccountAlsoVerified: linkedAccountVerified,
+        linkedAccountDetails: linkedAccountForResponse,
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
