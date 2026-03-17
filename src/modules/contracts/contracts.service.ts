@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
@@ -29,6 +30,8 @@ import dayjs from 'dayjs';
 
 @Injectable()
 export class ContractsService {
+  private readonly logger = new Logger(ContractsService.name);
+
   constructor(
     @InjectRepository(Contract)
     private contractRepository: Repository<Contract>,
@@ -337,11 +340,12 @@ export class ContractsService {
     roomId: string,
     pin: string,
   ) {
-    // 0. Verify Transaction PIN first
+    // 0. Verify Transaction PIN BEFORE entering DB transaction (Redis + 1 read)
     await this.securityService.verifyTransactionPin(clientId, pin);
 
+    // === CRITICAL TRANSACTION: Only financial mutations that MUST be atomic ===
     const result = await this.dataSource.transaction(async (manager) => {
-      // 1. Get contract
+      // 1. Lock & validate contract
       const contract = await manager.findOne(Contract, {
         where: { id: contractId, clientId },
         lock: { mode: 'pessimistic_write' },
@@ -364,23 +368,9 @@ export class ContractsService {
         throw new BadRequestException('This quote has expired and can no longer be paid for.');
       }
 
-      // 2. Calculate costs in Kobo (Already stored as Kobo now)
+      // 2. Calculate costs (in-memory, no DB)
       const totalAmountKobo =
         Number(contract.totalCost) + Number(contract.serviceFee);
-
-      // 3. Check client balance
-      const client = await manager.findOne(User, {
-        where: { id: clientId },
-        lock: { mode: 'pessimistic_write' },
-      });
-
-      if (!client) throw new NotFoundException('Client not found');
-
-      if (client.walletBalance < totalAmountKobo) {
-        throw new BadRequestException('Insufficient wallet balance');
-      }
-
-      // 4. Implement Escrow Split for Agent (Values are in Kobo already)
       const workmanshipKobo = Number(contract.workmanshipCost);
       const commissionKobo = Number(contract.commissionAmount);
       const transportKobo = Number(contract.transportFare);
@@ -388,35 +378,38 @@ export class ContractsService {
         (sum, m) => sum + Number(m.cost),
         0,
       );
-
       const agentAvailableKobo = transportKobo + materialsKobo;
       const agentLockedKobo = workmanshipKobo - commissionKobo;
 
+      // 3. Lock & validate client balance
+      const client = await manager.findOne(User, {
+        where: { id: clientId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!client) throw new NotFoundException('Client not found');
+      if (client.walletBalance < totalAmountKobo) {
+        throw new BadRequestException('Insufficient wallet balance');
+      }
+
+      // 4. Lock agent
       const agent = await manager.findOne(User, {
         where: { id: contract.agentId },
         lock: { mode: 'pessimistic_write' },
       });
-
       if (!agent) throw new NotFoundException('Agent not found');
 
-      // 5. Update Balances and Booking Status
+      // 5. Mutate balances
       client.walletBalance -= totalAmountKobo;
       agent.walletBalance += agentAvailableKobo;
       agent.lockedBalance += agentLockedKobo;
-
-      // Mark as booked
       agent.isBooked = true;
       agent.bookedDate = contract.workDate;
       agent.bookedTime = contract.startTime;
 
-      await manager.save(client);
-      await manager.save(agent);
-
-      // 6. Update Contract Status
+      // 6. Update contract status
       contract.status = ContractStatus.PAID;
-      await manager.save(contract);
 
-      // 7. Create Job Record (The execution phase)
+      // 7. Create job record
       const arrivalCode = Math.floor(1000 + Math.random() * 9000).toString();
       const job = manager.create(Job, {
         contractId: contract.id,
@@ -425,33 +418,21 @@ export class ContractsService {
         arrivalCode: arrivalCode,
         paidAt: new Date(),
       });
-      const savedJob = await manager.save(job);
-      contract.job = savedJob;
 
-      // NEW: Send chat message for payment confirmation
-      await this.chatService.sendMessage(
-        roomId,
-        clientId,
-        'Payment confirmed! Job is now active. Your arrival code is available in the job details.',
-        'text',
-        undefined,
-        contract.id,
-      );
+      // 8. Batch all transaction records for a single insert
+      const transactionRecords: Partial<Transaction>[] = [
+        {
+          userId: clientId,
+          contractId: contract.id,
+          amount: totalAmountKobo,
+          type: TransactionType.DEBIT,
+          status: TransactionStatus.SUCCESS,
+          description: `Payment for hire request #${contract.id.slice(0, 8)}`,
+        },
+      ];
 
-      // 8. Record Transactions
-      // Client Debit
-      await manager.save(Transaction, {
-        userId: clientId,
-        contractId: contract.id,
-        amount: totalAmountKobo,
-        type: TransactionType.DEBIT,
-        status: TransactionStatus.SUCCESS,
-        description: `Payment for hire request #${contract.id.slice(0, 8)}`,
-      });
-
-      // Agent Credit Available
       if (agentAvailableKobo > 0) {
-        await manager.save(Transaction, {
+        transactionRecords.push({
           userId: agent.id,
           contractId: contract.id,
           amount: agentAvailableKobo,
@@ -461,9 +442,8 @@ export class ContractsService {
         });
       }
 
-      // Agent Credit Locked
       if (agentLockedKobo > 0) {
-        await manager.save(Transaction, {
+        transactionRecords.push({
           userId: agent.id,
           contractId: contract.id,
           amount: agentLockedKobo,
@@ -473,73 +453,88 @@ export class ContractsService {
         });
       }
 
-      // 8. Record Platform Revenue (Audit/Finance)
-      // Client Service Fee
       if (Number(contract.serviceFee) > 0) {
-        await manager.save(Transaction, {
+        transactionRecords.push({
           userId: null,
           contractId: contract.id,
           amount: Number(contract.serviceFee),
           type: TransactionType.REVENUE,
           status: TransactionStatus.SUCCESS,
           description: `Client Service Fee from contract #${contract.id.slice(0, 8)}`,
-          metadata: {
-            serviceFee: Number(contract.serviceFee)
-          }
+          metadata: { serviceFee: Number(contract.serviceFee) },
         });
       }
 
-      // Agent Commission
       if (commissionKobo > 0) {
-        await manager.save(Transaction, {
+        transactionRecords.push({
           userId: null,
           contractId: contract.id,
           amount: commissionKobo,
           type: TransactionType.REVENUE,
           status: TransactionStatus.SUCCESS,
           description: `Agent Commission from contract #${contract.id.slice(0, 8)}`,
-          metadata: {
-            commissionAmount: commissionKobo
-          }
+          metadata: { commissionAmount: commissionKobo },
         });
       }
 
-      // Real-time broadcast of agent booking status
-      this.chatService.broadcastAgentStatus(agent.id, {
-        isBooked: agent.isBooked,
-        bookedDate: agent.bookedDate,
-        bookedTime: agent.bookedTime,
-        isAvailable: agent.isAvailable,
-      });
+      // === EXECUTE ALL WRITES IN PARALLEL (single round-trip each) ===
+      const [, , , savedJob] = await Promise.all([
+        manager.save(client),
+        manager.save(agent),
+        manager.save(contract),
+        manager.save(job),
+        manager.save(Transaction, transactionRecords), // Batch insert — 1 query for up to 5 rows
+      ]);
 
-      // Persistent Notification for Agent (Payment Received)
+      return {
+        contract,
+        job: savedJob,
+        agentId: agent.id,
+        agentStatus: {
+          isBooked: agent.isBooked,
+          bookedDate: agent.bookedDate,
+          bookedTime: agent.bookedTime,
+          isAvailable: agent.isAvailable,
+        },
+      };
+    });
+    // === END OF TRANSACTION — locks released ===
+
+    // === SIDE EFFECTS: Fire-and-forget, outside the transaction ===
+    // These don't need atomicity guarantees and should never block the payment response.
+    const { contract, job, agentId, agentStatus } = result;
+
+    // Non-blocking: chat message, notifications, socket broadcasts
+    Promise.all([
+      this.chatService.sendMessage(
+        roomId,
+        clientId,
+        'Payment confirmed! Job is now active. Your arrival code is available in the job details.',
+        'text',
+        undefined,
+        contract.id,
+      ),
       this.notificationsService.notify(
-        agent.id,
+        agentId,
         'Payment Received',
         `Client paid for hire request #${contract.id.slice(0, 8)}. Job is now active!`,
         NotificationType.PAYMENT,
-        {
-          contractId: contract.id,
-          roomId: roomId,
-        },
-      );
-
-      // Persistent Notification for Client (Payment Successful)
+        { contractId: contract.id, roomId },
+      ),
       this.notificationsService.notify(
         clientId,
         'Payment Successful',
         `Your payment for hire request #${contract.id.slice(0, 8)} was successful.`,
         NotificationType.PAYMENT,
-        {
-          contractId: contract.id,
-          roomId: roomId,
-        },
-      );
-
-      return contract;
+        { contractId: contract.id, roomId },
+      ),
+    ]).catch((err) => {
+      this.logger.warn(`Post-payment side effects failed for contract ${contract.id}: ${err.message}`);
     });
 
-    // Return the full updated contract
+    this.chatService.broadcastAgentStatus(agentId, agentStatus);
+
+    // Return immediately — don't wait for side effects
     const finalContract = await this.getContract(contractId);
     return { success: true, contract: finalContract };
   }
@@ -587,8 +582,8 @@ export class ContractsService {
    * Can be called by manual completion (with PIN) or auto-release cron.
    */
   async processReleaseFunds(contractId: string, clientId: string) {
-    return await this.dataSource.transaction(async (manager) => {
-      // 2. Get contract
+    const result = await this.dataSource.transaction(async (manager) => {
+      // 1. Get contract
       const contract = await manager.findOne(Contract, {
         where: { id: contractId, clientId },
         relations: ['agent', 'client'],
@@ -604,14 +599,14 @@ export class ContractsService {
         );
       }
 
-      // 3. Get Agent
+      // 2. Get Agent with lock
       const agent = await manager.findOne(User, {
         where: { id: contract.agentId },
         lock: { mode: 'pessimistic_write' },
       });
       if (!agent) throw new BadRequestException('Agent not found');
 
-      // 4. Calculate amount to release (Workmanship - Commission)
+      // 3. Calculate amount to release (Workmanship - Commission)
       const releaseAmountKobo = Number(contract.workmanshipCost) - Number(contract.commissionAmount);
 
       if (agent.lockedBalance < releaseAmountKobo) {
@@ -620,62 +615,73 @@ export class ContractsService {
         );
       }
 
-      // 5. Release funds (Locked -> Wallet) and Clear Booking status
+      // 4. Release funds (Locked -> Wallet) and Clear Booking status
       agent.lockedBalance -= releaseAmountKobo;
       agent.walletBalance += releaseAmountKobo;
-
-      // Clear booking
       agent.isBooked = false;
       agent.bookedDate = null;
       agent.bookedTime = null;
 
-      await manager.save(agent);
-
-      // 6. Update contract status
+      // 5. Update contract status
       contract.status = ContractStatus.COMPLETED;
-      await manager.save(contract);
 
-      // Real-time broadcast
-      this.chatService.broadcastAgentStatus(agent.id, {
-        isBooked: false,
-        bookedDate: null,
-        bookedTime: null,
-        isAvailable: agent.isAvailable,
-      });
-
-      // 7. Update linked job status if it exists
+      // 6. Update linked job if exists
       const job = await manager.findOne(Job, { where: { contractId: contract.id } });
       if (job) {
         job.completedAt = new Date();
-        await manager.save(job);
       }
 
-      // 8. Record transaction for Agent
-      const transaction = await manager.save(Transaction, {
-        userId: agent.id,
-        contractId: contract.id,
-        amount: releaseAmountKobo,
-        type: TransactionType.CREDIT,
-        status: TransactionStatus.SUCCESS,
-        description: `Escrow release: Workmanship for contract #${contract.id.slice(0, 8)}`,
+      // 7. Parallel writes within transaction
+      const saveOps: Promise<any>[] = [
+        manager.save(agent),
+        manager.save(contract),
+        manager.save(Transaction, {
+          userId: agent.id,
+          contractId: contract.id,
+          amount: releaseAmountKobo,
+          type: TransactionType.CREDIT,
+          status: TransactionStatus.SUCCESS,
+          description: `Escrow release: Workmanship for contract #${contract.id.slice(0, 8)}`,
+        }),
+      ];
+      if (job) saveOps.push(manager.save(job));
+
+      const results = await Promise.all(saveOps);
+      const transaction = results[2]; // Transaction record
+
+      return { contract, transaction, agentId: agent.id, isAvailable: agent.isAvailable };
+    });
+    // === END TRANSACTION — locks released ===
+
+    // Side effects: fire-and-forget outside transaction
+    const { contract, agentId, isAvailable } = result;
+
+    this.chatService.broadcastAgentStatus(agentId, {
+      isBooked: false,
+      bookedDate: null,
+      bookedTime: null,
+      isAvailable,
+    });
+
+    this.chatService.getOrCreateRoom(contract.clientId, contract.agentId)
+      .then((room) => {
+        this.notificationsService.notify(
+          agentId,
+          'Escrow Released',
+          `₦${(Number(contract.workmanshipCost) - Number(contract.commissionAmount)) / 100} has been released to your wallet for contract #${contract.id.slice(0, 8)}`,
+          NotificationType.PAYMENT,
+          {
+            contractId: contract.id,
+            amount: (Number(contract.workmanshipCost) - Number(contract.commissionAmount)).toString(),
+            roomId: room?.id,
+          },
+        );
+      })
+      .catch((err) => {
+        this.logger.warn(`Post-release side effects failed for contract ${contract.id}: ${err.message}`);
       });
 
-      // 10. Persistent Notification for Agent (Funds Released)
-      const room = await this.chatService.getOrCreateRoom(contract.clientId, contract.agentId);
-      this.notificationsService.notify(
-        agent.id,
-        'Escrow Released',
-        `₦${releaseAmountKobo / 100} has been released to your wallet for contract #${contract.id.slice(0, 8)}`,
-        NotificationType.PAYMENT,
-        {
-          contractId: contract.id,
-          amount: releaseAmountKobo.toString(),
-          roomId: room?.id,
-        },
-      );
-
-      return { contract, transaction };
-    });
+    return result;
   }
 
   async getJob(id: string, caller?: User) {
