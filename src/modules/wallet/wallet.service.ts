@@ -285,7 +285,7 @@ export class WalletService {
         const withdrawalAmountNaira = amountKobo / 100;
         
         const monnifyRes = await this.monnifyService.initiateTransfer(
-          user.monnifyAccountId || '', // Source
+          '', // Always use platform source account for disbursements
           withdrawalAmountNaira,
           `BeeSeek Withdrawal: ${user.firstName}`,
           bankDetails.bankCode,
