@@ -370,19 +370,35 @@ export class AuthService {
     });
 
     if (otherUserWithNIN) {
-      // This NIN exists - check if it's the same person (current user or linked account)
       const isCurrentUser = otherUserWithNIN.id === user.id;
       const isLinkedAccount = otherUserWithNIN.id === user.linkedAccountId;
 
       if (!isCurrentUser && !isLinkedAccount) {
-        // NIN belongs to a completely different person
-        throw new ConflictException(
-          'This NIN is already registered to another person',
-        );
+        // NIN belongs to someone else — but check if it's the same person
+        // (same first + last name, different role) who just hasn't linked yet
+        const sameName =
+          otherUserWithNIN.firstName.toLowerCase() === user.firstName.toLowerCase() &&
+          otherUserWithNIN.lastName.toLowerCase() === user.lastName.toLowerCase();
+        const differentRole = otherUserWithNIN.role !== user.role;
+
+        if (sameName && differentRole) {
+          // Same person, different role — auto-link the accounts
+          user.linkedAccountId = otherUserWithNIN.id;
+          otherUserWithNIN.linkedAccountId = user.id;
+          await this.usersRepository.save(otherUserWithNIN);
+          await this.usersRepository.save(user);
+          this.logger.log(
+            `Auto-linked accounts: ${user.id} (${user.role}) ↔ ${otherUserWithNIN.id} (${otherUserWithNIN.role})`,
+          );
+        } else {
+          // Genuinely a different person
+          throw new ConflictException(
+            'This NIN is already registered to another person',
+          );
+        }
       }
 
-      if (isCurrentUser && user.isVerified) {
-        // This account already verified with this NIN
+      if (isCurrentUser && user.isNinVerified) {
         throw new BadRequestException('This account is already verified');
       }
     }
