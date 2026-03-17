@@ -243,8 +243,8 @@ export class WalletService {
     idempotencyKey?: string,
   ) {
     // 1. Verify Minimum Withdrawal
-    if (amountKobo < 100000) { // ₦1,000 in Kobo
-      throw new BadRequestException('Minimum withdrawal amount is ₦1,000');
+    if (amountKobo < 90000) { // ₦900 in Kobo
+      throw new BadRequestException('Minimum withdrawal amount is ₦900');
     }
 
     // 2. Verify PIN
