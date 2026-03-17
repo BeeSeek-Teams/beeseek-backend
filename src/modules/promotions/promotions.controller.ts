@@ -5,28 +5,40 @@ import { AdminGuard } from '../../common/guards/admin.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AdminRole } from '../../entities/administrator.entity';
 
-@Controller('admin/promotions')
-@UseGuards(JwtAuthGuard, AdminGuard)
-@Roles(AdminRole.ADMIN, AdminRole.SUPER_ADMIN)
+@Controller('promotions')
 export class PromotionsController {
   constructor(private readonly promotionsService: PromotionsService) {}
 
-  @Get()
+  @Get('active')
+  @UseGuards(JwtAuthGuard)
+  findActive() {
+    return this.promotionsService.findActive();
+  }
+
+  @Get('admin')
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Roles(AdminRole.ADMIN, AdminRole.SUPER_ADMIN)
   findAll() {
     return this.promotionsService.findAll();
   }
 
-  @Post()
+  @Post('admin')
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Roles(AdminRole.ADMIN, AdminRole.SUPER_ADMIN)
   create(@Body() data: any) {
     return this.promotionsService.create(data);
   }
 
-  @Patch(':id')
+  @Patch('admin/:id')
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Roles(AdminRole.ADMIN, AdminRole.SUPER_ADMIN)
   update(@Param('id') id: string, @Body() data: any) {
     return this.promotionsService.update(id, data);
   }
 
-  @Delete(':id')
+  @Delete('admin/:id')
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Roles(AdminRole.ADMIN, AdminRole.SUPER_ADMIN)
   delete(@Param('id') id: string) {
     return this.promotionsService.delete(id);
   }
