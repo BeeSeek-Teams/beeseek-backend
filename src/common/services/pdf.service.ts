@@ -223,9 +223,9 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       try {
         page = await this.getPage();
         
-        // Set content with optimized wait strategy
+        // Set content with wait for external resources (Google Fonts)
         await page.setContent(html, {
-          waitUntil: 'domcontentloaded', // Faster than 'networkidle0'
+          waitUntil: 'networkidle0',
         });
 
         // Generate PDF
@@ -301,13 +301,14 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     });
 
     const formatCurrency = (amount: number) =>
-      `₦${amount.toLocaleString('en-NG', { minimumFractionDigits: 0 })}`;
+      `NGN ${amount.toLocaleString('en-NG', { minimumFractionDigits: 0 })}`;
 
     const html = `
 <!DOCTYPE html>
 <html>
   <head>
     <meta charset="UTF-8">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
       @page {
         size: A4;
@@ -319,7 +320,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         padding: 0;
       }
       body {
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
         color: #031745;
         line-height: 1.6;
         font-size: 10pt;
