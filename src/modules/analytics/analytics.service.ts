@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, In, Not } from 'typeorm';
+import { Repository, DataSource, In, Not, IsNull } from 'typeorm';
 import { Bee } from '../../entities/bee.entity';
 import { User, NinStatus } from '../../entities/user.entity';
 import {
@@ -358,12 +358,12 @@ export class AnalyticsService {
     const userIdField = isClient ? 'clientId' : 'agentId';
     const relationField = isClient ? 'agent' : 'client';
 
-    // Get all completed jobs for this user
+    // Get all completed jobs for this user (status=COMPLETED OR completedAt is set)
     const completedJobs = await this.jobRepository.find({
-      where: {
-        status: JobStatus.COMPLETED,
-        contract: { [userIdField]: userId }
-      },
+      where: [
+        { status: JobStatus.COMPLETED, contract: { [userIdField]: userId } },
+        { completedAt: Not(IsNull()), contract: { [userIdField]: userId } },
+      ],
       relations: ['contract', `contract.${relationField}`, 'contract.bee'],
       order: { updatedAt: 'DESC' },
     });
