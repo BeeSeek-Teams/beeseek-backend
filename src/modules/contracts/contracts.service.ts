@@ -689,6 +689,7 @@ export class ContractsService {
       // 6. Update linked job if exists
       const job = await manager.findOne(Job, { where: { contractId: contract.id } });
       if (job) {
+        job.status = JobStatus.COMPLETED;
         job.completedAt = new Date();
       }
 
@@ -710,12 +711,20 @@ export class ContractsService {
       const results = await Promise.all(saveOps);
       const transaction = results[2]; // Transaction record
 
-      return { contract, transaction, agentId: agent.id, isAvailable: agent.isAvailable };
+      return { contract, transaction, agentId: agent.id, isAvailable: agent.isAvailable, job };
     });
     // === END TRANSACTION — locks released ===
 
     // Side effects: fire-and-forget outside transaction
-    const { contract, agentId, isAvailable } = result;
+    const { contract, agentId, isAvailable, job } = result;
+
+    // Emit real-time job update so both apps reflect COMPLETED status instantly
+    if (job) {
+      // Re-fetch with full relations for the socket payload
+      this.getJob(job.id)
+        .then((fullJob) => this.chatService.sendJobUpdate(fullJob))
+        .catch((err) => this.logger.warn(`Failed to emit job completion update: ${err.message}`));
+    }
 
     this.chatService.broadcastAgentStatus(agentId, {
       isBooked: false,
