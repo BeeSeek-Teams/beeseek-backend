@@ -95,6 +95,16 @@ async function bootstrap() {
 
   logger.log(`🚀 Application is running on: http://localhost:${port}`);
   logger.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+
+  // Log outbound IP for Monnify IP whitelisting
+  try {
+    const fetch = (await import('node-fetch')).default;
+    const res = await fetch('https://api.ipify.org?format=json');
+    const data = await res.json() as any;
+    logger.log(`🌐 Server outbound IP: ${data.ip} (whitelist this on Monnify)`);
+  } catch {
+    logger.warn('Could not determine outbound IP');
+  }
 }
 
 bootstrap();
