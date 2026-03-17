@@ -120,6 +120,7 @@ export class AuthController {
     walletCreated: boolean;
     nuban?: string | null;
     linkedAccountAlsoVerified?: boolean;
+    linkedAccountDetails?: any;
   }> {
     const result = await this.authService.verifyNIN(user.id, verifyNINDto);
 
@@ -131,6 +132,7 @@ export class AuthController {
       walletCreated: result.walletCreated,
       nuban: updatedUser?.monnifyNUBAN,
       linkedAccountAlsoVerified: result.linkedAccountAlsoVerified,
+      linkedAccountDetails: result.linkedAccountDetails,
     };
   }
 
