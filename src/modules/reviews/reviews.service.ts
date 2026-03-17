@@ -30,7 +30,7 @@ export class ReviewsService {
     });
 
     if (!job) throw new NotFoundException('Job not found');
-    if (job.status !== JobStatus.COMPLETED) {
+    if (job.status !== JobStatus.COMPLETED && !job.completedAt) {
       throw new BadRequestException('Can only review completed jobs');
     }
 
