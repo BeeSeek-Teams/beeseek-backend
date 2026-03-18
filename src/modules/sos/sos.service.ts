@@ -84,9 +84,10 @@ Please check on them immediately.`;
         from: this.termiiSenderId,
         sms: message,
         type: 'plain',
-        // 'generic' requires an approved sender ID; 'dnd' uses a shared route that bypasses DND and works without approval
-        channel: 'dnd',
+        channel: 'generic',
       };
+
+      this.logger.log(`Sending SOS SMS to ${sanitizedPhone} via Termii (from: ${this.termiiSenderId}, channel: generic)`);
 
       const response = await axios.post(
         `${this.termiiBaseUrl}/api/sms/send`,
