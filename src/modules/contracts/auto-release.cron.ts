@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository, In } from 'typeorm';
-import { Job, JobStep } from '../../entities/job.entity';
+import { Job, JobStep, JobStatus } from '../../entities/job.entity';
 import { ContractsService } from './contracts.service';
 import { MailService } from '../mail/mail.service';
 import dayjs from 'dayjs';
@@ -32,10 +32,12 @@ export class AutoReleaseCron {
     const candidates = await this.jobRepository.find({
       where: [
         {
+          status: JobStatus.ACTIVE,
           currentStep: JobStep.FINISHED,
           finishedAt: LessThan(cutoffDate),
         },
         {
+          status: JobStatus.ACTIVE,
           currentStep: JobStep.HOME_SAFE,
           homeSafeAt: LessThan(cutoffDate),
         }
