@@ -167,7 +167,7 @@ export class AnalyticsService {
     const earningsQb = this.jobRepository
       .createQueryBuilder('job')
       .innerJoin('job.contract', 'contract')
-      .select('SUM(contract."workmanshipCost" - contract."commissionAmount" + contract."transportFare")', 'totalEarnings')
+      .select('SUM(contract."totalCost" - contract."commissionAmount")', 'totalEarnings')
       .addSelect('COUNT(*)', 'tasksDone')
       .where('contract.agentId = :agentId', { agentId })
       .andWhere('job.status = :status', { status: JobStatus.COMPLETED });
@@ -262,7 +262,7 @@ export class AnalyticsService {
     const statsQb = this.jobRepository
       .createQueryBuilder('job')
       .innerJoin('job.contract', 'contract')
-      .select('SUM(contract."totalCost")', 'totalSpent')
+      .select('SUM(contract."totalCost" + contract."serviceFee")', 'totalSpent')
       .addSelect(`SUM(CASE WHEN job.status = '${JobStatus.COMPLETED}' THEN 1 ELSE 0 END)`, 'hiresDoneCount')
       .addSelect(`SUM(CASE WHEN job.status = '${JobStatus.ACTIVE}' THEN 1 ELSE 0 END)`, 'ongoingHiresCount')
       .where('contract.clientId = :clientId', { clientId });
