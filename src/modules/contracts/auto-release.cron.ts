@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository, In } from 'typeorm';
 import { Job, JobStep, JobStatus } from '../../entities/job.entity';
+import { ContractStatus } from '../../entities/contract.entity';
 import { ContractsService } from './contracts.service';
 import { MailService } from '../mail/mail.service';
 import dayjs from 'dayjs';
@@ -26,7 +27,7 @@ export class AutoReleaseCron {
   async handleAutoRelease() {
     this.logger.log('Starting Auto-Release check...');
 
-    // 1. Find jobs finished > 48 hours ago that are not yet COMPLETED
+    // 1. Find ACTIVE jobs finished > 48 hours ago
     const cutoffDate = dayjs().subtract(48, 'hours').toDate();
     
     const candidates = await this.jobRepository.find({
@@ -55,7 +56,32 @@ export class AutoReleaseCron {
     for (const job of candidates) {
       try {
         const { contract } = job;
-        
+
+        // Guard: If contract is already COMPLETED/CANCELLED, fix the orphaned job and skip
+        if (
+          contract.status === ContractStatus.COMPLETED ||
+          contract.status === ContractStatus.CANCELLED
+        ) {
+          this.logger.warn(
+            `Job #${job.id} is ACTIVE but Contract #${contract.id} is already ${contract.status}. Fixing orphaned job status.`,
+          );
+          job.status = JobStatus.COMPLETED;
+          job.completedAt = job.completedAt || new Date();
+          await this.jobRepository.save(job);
+          continue;
+        }
+
+        // Guard: Only release if contract is in a releasable state
+        if (
+          contract.status !== ContractStatus.PAID &&
+          contract.status !== ContractStatus.IN_PROGRESS
+        ) {
+          this.logger.warn(
+            `Skipping Job #${job.id} — Contract #${contract.id} is in state "${contract.status}", not releasable.`,
+          );
+          continue;
+        }
+
         this.logger.log(`Auto-releasing payment for Contract #${contract.id}...`);
 
         // 2. Process Release (Internal call, skips PIN check)
