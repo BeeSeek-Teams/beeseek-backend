@@ -41,10 +41,10 @@ export class SosAlert {
   batteryLevel: number;
 
   @Column({ nullable: true })
-  contactPhone: string;
+  contactPhone?: string;
 
   @Column({ nullable: true })
-  contactName: string;
+  contactName?: string;
 
   @Column({
     type: 'enum',

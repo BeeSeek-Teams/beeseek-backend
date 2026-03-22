@@ -97,17 +97,16 @@ Please check on them immediately.`;
       this.logger.error('Failed to reverse geocode SOS location', error.message);
     }
 
-    const alert = this.sosAlertRepo.create({
-      userId: user.id,
-      lat,
-      lng,
-      address,
-      batteryLevel,
-      contactPhone: user.emergencyContactPhone || null,
-      contactName: user.emergencyContactName || null,
-      channel: 'device',
-      status: SosStatus.SENT,
-    });
+    const alert = new SosAlert();
+    alert.userId = user.id;
+    alert.lat = lat;
+    alert.lng = lng;
+    alert.address = address;
+    alert.batteryLevel = batteryLevel;
+    alert.contactPhone = user.emergencyContactPhone || undefined;
+    alert.contactName = user.emergencyContactName || undefined;
+    alert.channel = 'device';
+    alert.status = SosStatus.SENT;
 
     await this.sosAlertRepo.save(alert);
 
@@ -140,7 +139,7 @@ Please check on them immediately.`;
         id: a.id,
         userId: a.userId,
         userName: a.user ? `${a.user.firstName} ${a.user.lastName}` : 'Unknown',
-        userPhone: a.user?.phoneNumber || null,
+        userPhone: a.user?.phone || null,
         userRole: a.user?.role || null,
         lat: a.lat,
         lng: a.lng,
