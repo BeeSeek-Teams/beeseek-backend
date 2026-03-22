@@ -146,6 +146,7 @@ export class AuthResponseDto {
     ninStatus?: string;
     isAvailable?: boolean;
     rating?: number;
+    totalReviews?: number;
     age: number;
     phone?: string;
     bio?: string;
