@@ -14,4 +14,9 @@ export class SosController {
   dispatchSos(@CurrentUser() user: User, @Body() dto: DispatchSosDto) {
     return this.sosService.dispatchSos(user, dto);
   }
+
+  @Post('log')
+  logSos(@CurrentUser() user: User, @Body() dto: DispatchSosDto) {
+    return this.sosService.logSos(user, dto);
+  }
 }
