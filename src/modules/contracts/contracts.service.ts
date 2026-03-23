@@ -700,7 +700,7 @@ export class ContractsService {
       const bee = await manager.findOne(Bee, { where: { id: contract.beeId } });
       if (bee) {
         bee.jobsCompleted = (bee.jobsCompleted || 0) + 1;
-        bee.totalRevenue = Number(bee.totalRevenue || 0) + releaseAmountKobo;
+        bee.totalRevenue = Number(bee.totalRevenue || 0) + (releaseAmountKobo / 100);
       }
 
       // 7. Parallel writes within transaction
