@@ -697,10 +697,12 @@ export class ContractsService {
       }
 
       // 6b. Update bee metrics (jobsCompleted + totalRevenue)
+      // totalRevenue = agent's full earnings: workmanship + transport + materials - commission
       const bee = await manager.findOne(Bee, { where: { id: contract.beeId } });
       if (bee) {
         bee.jobsCompleted = (bee.jobsCompleted || 0) + 1;
-        bee.totalRevenue = Number(bee.totalRevenue || 0) + (releaseAmountKobo / 100);
+        const agentTotalEarningsKobo = Number(contract.totalCost) - Number(contract.commissionAmount);
+        bee.totalRevenue = Number(bee.totalRevenue || 0) + (agentTotalEarningsKobo / 100);
       }
 
       // 7. Parallel writes within transaction

@@ -37,12 +37,12 @@ export class ReconcileBeeMetrics1711200000000 implements MigrationInterface {
       WHERE b.id = sub."beeId"
     `);
 
-    // 3. Reconcile totalRevenue (workmanshipCost - commissionAmount for completed contracts, converted from kobo to naira)
+    // 3. Reconcile totalRevenue (total agent earnings: totalCost - commission, converted from kobo to naira)
     await queryRunner.query(`
       UPDATE "bees" b
       SET "totalRevenue" = COALESCE(sub.total_revenue, 0) / 100
       FROM (
-        SELECT "beeId", SUM("workmanshipCost" - "commissionAmount") AS total_revenue
+        SELECT "beeId", SUM("totalCost" - "commissionAmount") AS total_revenue
         FROM "contracts"
         WHERE "status" = 'COMPLETED'
         GROUP BY "beeId"
