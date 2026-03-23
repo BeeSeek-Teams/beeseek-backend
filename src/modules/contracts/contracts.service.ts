@@ -693,6 +693,13 @@ export class ContractsService {
         job.completedAt = new Date();
       }
 
+      // 6b. Update bee metrics (jobsCompleted + totalRevenue)
+      const bee = await manager.findOne(Bee, { where: { id: contract.beeId } });
+      if (bee) {
+        bee.jobsCompleted = (bee.jobsCompleted || 0) + 1;
+        bee.totalRevenue = Number(bee.totalRevenue || 0) + releaseAmountKobo;
+      }
+
       // 7. Parallel writes within transaction
       const saveOps: Promise<any>[] = [
         manager.save(agent),
@@ -707,6 +714,7 @@ export class ContractsService {
         }),
       ];
       if (job) saveOps.push(manager.save(job));
+      if (bee) saveOps.push(manager.save(bee));
 
       const results = await Promise.all(saveOps);
       const transaction = results[2]; // Transaction record
