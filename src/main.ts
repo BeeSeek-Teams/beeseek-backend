@@ -43,11 +43,7 @@ async function bootstrap() {
     'https://www.beeseek.site',
     'https://admin.beeseek.site',
     'https://pulse.beeseek.site',
-    'https://beeseek-admin.vercel.app',
     'https://finance.beeseek.site',
-    'https://beeseek-finance.vercel.app',
-    'http://localhost:3000', 
-    'http://localhost:3003'
   ];
   app.enableCors({
     origin: (origin, callback) => {
