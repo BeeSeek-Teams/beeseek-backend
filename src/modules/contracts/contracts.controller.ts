@@ -49,6 +49,30 @@ export class ContractsController {
     });
   }
 
+  @UseGuards(AdminGuard)
+  @Roles(AdminRole.ADMIN, AdminRole.SUPER_ADMIN)
+  @Post('admin/jobs/:id/cancel')
+  async adminCancelJob(
+    @CurrentUser() user: User,
+    @Param('id') jobId: string,
+    @Body() body: { reason: string; markAsInfraction?: boolean },
+  ) {
+    return this.contractsService.adminCancelJob(
+      user,
+      jobId,
+      body.reason,
+      body.markAsInfraction || false,
+    );
+  }
+
+  @UseGuards(AdminGuard)
+  @Roles(AdminRole.ADMIN, AdminRole.SUPER_ADMIN)
+  @Get('admin/agents/:id/infraction-count')
+  async getAgentInfractionCount(@Param('id') agentId: string) {
+    const count = await this.contractsService.getAgentInfractionCount(agentId);
+    return { agentId, infractionCount: count };
+  }
+
   @Post('request')
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async createRequest(

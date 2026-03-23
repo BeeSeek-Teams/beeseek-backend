@@ -515,4 +515,56 @@ export class MailService implements OnModuleInit {
 
     return this.sendMail(to, `Ticket #${ticketId.slice(0, 8).toUpperCase()} Resolved`, html);
   }
+
+  async sendStaleJobAlert(
+    to: string,
+    name: string,
+    role: 'CLIENT' | 'AGENT',
+    jobId: string,
+    alertType: 'NO_SHOW' | 'STALE_TRANSIT' | 'STALE_WORK',
+    message: string,
+  ) {
+    const alertLabels = {
+      NO_SHOW: 'Agent No-Show',
+      STALE_TRANSIT: 'Delayed Transit',
+      STALE_WORK: 'Extended Duration',
+    };
+
+    const alertColors = {
+      NO_SHOW: '#DC2626',
+      STALE_TRANSIT: '#D97706',
+      STALE_WORK: '#2563EB',
+    };
+
+    const label = alertLabels[alertType];
+    const color = alertColors[alertType];
+
+    const html = this.wrapTemplate(`
+      <h1 style="font-size: 24px; font-weight: 700; margin: 0 0 16px 0; color: #031745;">Job Alert: ${label}</h1>
+      <p style="font-size: 16px; line-height: 1.5; color: #4B5563; margin: 0 0 24px 0;">
+        Hello ${name},
+      </p>
+
+      <div style="background-color: #FEF2F2; border-radius: 12px; padding: 24px; margin-bottom: 24px; border-left: 4px solid ${color};">
+        <div style="display: inline-block; padding: 4px 12px; border-radius: 8px; background-color: ${color}; color: white; font-size: 12px; font-weight: 700; text-transform: uppercase; margin-bottom: 12px;">
+          ${label}
+        </div>
+        <p style="color: #6B7280; margin: 0; font-size: 14px;">Job Reference</p>
+        <p style="color: #031745; margin: 4px 0 16px 0; font-weight: 700; font-family: monospace;">${jobId.slice(0, 8).toUpperCase()}</p>
+        <p style="color: #031745; margin: 0; font-size: 14px; line-height: 1.6;">${message}</p>
+      </div>
+
+      ${role === 'CLIENT' ? `
+      <p style="font-size: 14px; color: #6B7280; line-height: 1.6; margin: 0;">
+        If you need immediate assistance, please open a support ticket in the app or email us at <strong>support@beeseek.site</strong>.
+      </p>
+      ` : `
+      <p style="font-size: 14px; color: #6B7280; line-height: 1.6; margin: 0;">
+        If this was due to an emergency, please contact support immediately to explain your situation. Repeated infractions may result in enforcement actions per our <strong>Service Level & Infraction Policy</strong>.
+      </p>
+      `}
+    `);
+
+    return this.sendMail(to, `Job Alert: ${label} — #${jobId.slice(0, 8).toUpperCase()}`, html);
+  }
 }

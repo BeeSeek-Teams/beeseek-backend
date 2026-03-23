@@ -1285,4 +1285,180 @@ export class ContractsService {
       },
     };
   }
+
+  /**
+   * Admin Force-Cancel with Full Refund
+   * Unlike updateJobStatus which just flips the enum, this triggers
+   * the complete financial reversal flow — identical to agent-initiated cancel.
+   */
+  async adminCancelJob(
+    adminUser: User,
+    jobId: string,
+    reason: string,
+    markAsInfraction: boolean = false,
+  ) {
+    return this.dataSource.transaction(async (manager) => {
+      const job = await manager.findOne(Job, {
+        where: { id: jobId },
+        relations: ['contract', 'contract.client', 'contract.agent'],
+      });
+
+      if (!job) throw new NotFoundException('Job not found');
+
+      if (job.status !== JobStatus.ACTIVE && job.status !== JobStatus.ESCALATED) {
+        throw new BadRequestException('Job is already in a final state');
+      }
+
+      const client = job.contract.client;
+      const agent = job.contract.agent;
+
+      // Full financial reversal — same logic as cancelJob but no step restrictions
+      const materialsKobo = (job.contract.materials || []).reduce(
+        (sum, m) => sum + Number(m.cost),
+        0,
+      );
+      const transportKobo = Number(job.contract.transportFare);
+      const workmanshipKobo = Number(job.contract.workmanshipCost);
+      const commissionKobo = Number(job.contract.commissionAmount);
+      const serviceFeeKobo = Number(job.contract.serviceFee);
+      const agentLockedKobo = workmanshipKobo - commissionKobo;
+      const materialsAlreadyBought = !!job.materialsPurchasedAt;
+
+      const materialRefundToClient = materialsAlreadyBought ? 0 : materialsKobo;
+
+      // Admin-initiated cancel: treat as agent-fault (full client refund including service fee)
+      let refundedAmountKobo: number;
+      let agentRetentionKobo: number;
+
+      if (markAsInfraction) {
+        // Agent at fault: full refund to client, agent keeps only transport + bought materials
+        refundedAmountKobo = workmanshipKobo + serviceFeeKobo + materialRefundToClient;
+        agentRetentionKobo = transportKobo + (materialsAlreadyBought ? materialsKobo : 0);
+      } else {
+        // Neutral cancellation: same as client-initiated cancel
+        refundedAmountKobo = workmanshipKobo + materialRefundToClient;
+        agentRetentionKobo = transportKobo + (materialsAlreadyBought ? materialsKobo : 0);
+      }
+
+      // Move funds
+      const lockedClient = await manager.findOne(User, {
+        where: { id: client.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      const lockedAgent = await manager.findOne(User, {
+        where: { id: agent.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!lockedClient || !lockedAgent) {
+        throw new BadRequestException('Failed to lock user accounts');
+      }
+
+      lockedAgent.lockedBalance -= agentLockedKobo;
+      if (materialRefundToClient > 0) {
+        lockedAgent.walletBalance -= materialRefundToClient;
+      }
+      lockedClient.walletBalance += refundedAmountKobo;
+
+      lockedAgent.isBooked = false;
+      lockedAgent.bookedDate = null;
+      lockedAgent.bookedTime = null;
+
+      await manager.save(lockedClient);
+      await manager.save(lockedAgent);
+
+      // Record transactions
+      await manager.save(Transaction, {
+        userId: client.id,
+        contractId: job.contractId,
+        amount: refundedAmountKobo,
+        type: TransactionType.CREDIT,
+        status: TransactionStatus.SUCCESS,
+        description: `Admin-initiated refund for hire #${job.contractId.slice(0, 8)}`,
+      });
+
+      await manager.save(Transaction, {
+        userId: agent.id,
+        contractId: job.contractId,
+        amount: agentLockedKobo,
+        type: TransactionType.DEBIT,
+        status: TransactionStatus.SUCCESS,
+        description: `Admin-initiated cancellation: Workmanship returned`,
+      });
+
+      if (materialRefundToClient > 0) {
+        await manager.save(Transaction, {
+          userId: agent.id,
+          contractId: job.contractId,
+          amount: materialRefundToClient,
+          type: TransactionType.DEBIT,
+          status: TransactionStatus.SUCCESS,
+          description: `Admin-initiated cancellation: Unused materials returned`,
+        });
+      }
+
+      // Commission reversal
+      if (commissionKobo > 0) {
+        await manager.save(Transaction, {
+          userId: null,
+          contractId: job.contractId,
+          amount: commissionKobo,
+          type: TransactionType.REVENUE,
+          status: TransactionStatus.SUCCESS,
+          description: `Reversal: Admin cancel — commission from #${job.contractId.slice(0, 8)}`,
+          metadata: { commissionAmount: -commissionKobo },
+        });
+      }
+
+      // Service fee reversal if infraction
+      if (markAsInfraction && serviceFeeKobo > 0) {
+        await manager.save(Transaction, {
+          userId: null,
+          contractId: job.contractId,
+          amount: serviceFeeKobo,
+          type: TransactionType.REVENUE,
+          status: TransactionStatus.SUCCESS,
+          description: `Reversal: Admin cancel — service fee from #${job.contractId.slice(0, 8)}`,
+          metadata: { serviceFee: -serviceFeeKobo },
+        });
+      }
+
+      // Audit trail
+      const audit = manager.create(CancellationAudit, {
+        jobId: job.id,
+        cancelledById: adminUser.id,
+        reason: `[ADMIN] ${reason}`,
+        category: 'ADMIN_CANCEL',
+        isAgentInfraction: markAsInfraction,
+        refundedAmount: refundedAmountKobo,
+        agentRetention: agentRetentionKobo,
+      });
+      await manager.save(audit);
+
+      // Update statuses
+      job.status = JobStatus.CANCELLED;
+      await manager.save(job);
+
+      await manager.update(Contract, job.contractId, {
+        status: ContractStatus.CANCELLED,
+      });
+
+      return job;
+    });
+  }
+
+  /**
+   * Get infraction count for an agent (for escalating enforcement)
+   */
+  async getAgentInfractionCount(agentId: string): Promise<number> {
+    const count = await this.auditRepository
+      .createQueryBuilder('audit')
+      .innerJoin('audit.job', 'job')
+      .innerJoin('job.contract', 'contract')
+      .where('contract.agentId = :agentId', { agentId })
+      .andWhere('audit.isAgentInfraction = :isInfraction', { isInfraction: true })
+      .getCount();
+
+    return count;
+  }
 }
