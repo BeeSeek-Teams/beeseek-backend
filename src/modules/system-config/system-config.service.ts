@@ -2,6 +2,7 @@ import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SystemConfig } from '../../entities/system-config.entity';
+import { MaintenanceWindow, MaintenanceStatus } from '../../entities/maintenance-window.entity';
 import { RedisService } from '../redis/redis.service';
 
 @Injectable()
@@ -12,6 +13,8 @@ export class SystemConfigService implements OnModuleInit {
   constructor(
     @InjectRepository(SystemConfig)
     private configRepository: Repository<SystemConfig>,
+    @InjectRepository(MaintenanceWindow)
+    private maintenanceRepo: Repository<MaintenanceWindow>,
     private redisService: RedisService,
   ) {}
 
@@ -39,7 +42,12 @@ export class SystemConfigService implements OnModuleInit {
   }
 
   async updateConfig(data: Partial<SystemConfig>): Promise<SystemConfig | null> {
-    let config = await this.configRepository.findOne({ where: {} });
+    // Check if maintenance mode is being toggled
+    const oldConfig = await this.configRepository.findOne({ where: {} });
+    const wasInMaintenance = oldConfig?.maintenanceMode === 'true' || oldConfig?.maintenanceMode === '1';
+    const isEnteringMaintenance = data.maintenanceMode === 'true' || data.maintenanceMode === '1';
+
+    let config = oldConfig;
     if (!config) {
       config = this.configRepository.create(data);
     } else {
@@ -47,6 +55,36 @@ export class SystemConfigService implements OnModuleInit {
     }
     const saved = await this.configRepository.save(config);
     await this.refreshCache();
+
+    // Auto-create maintenance window when entering maintenance mode
+    if (!wasInMaintenance && isEnteringMaintenance) {
+      const window = this.maintenanceRepo.create({
+        title: 'Unscheduled Maintenance',
+        description: 'BeeSeek is currently under maintenance. Service will be restored shortly.',
+        scheduledStart: new Date(),
+        scheduledEnd: new Date(Date.now() + 2 * 60 * 60 * 1000), // Default 2hr window
+        affectedServices: 'All Services',
+        status: MaintenanceStatus.IN_PROGRESS,
+      });
+      await this.maintenanceRepo.save(window);
+      this.logger.log('[SYSTEM-CONFIG] Maintenance mode ON — auto-created maintenance window');
+    }
+
+    // Auto-complete active windows when leaving maintenance mode
+    if (wasInMaintenance && !isEnteringMaintenance) {
+      const activeWindows = await this.maintenanceRepo.find({
+        where: [{ status: MaintenanceStatus.IN_PROGRESS }, { status: MaintenanceStatus.SCHEDULED }],
+      });
+      for (const w of activeWindows) {
+        if (w.title === 'Unscheduled Maintenance') {
+          w.status = MaintenanceStatus.COMPLETED;
+          w.scheduledEnd = new Date(); // Set actual end time
+          await this.maintenanceRepo.save(w);
+        }
+      }
+      this.logger.log('[SYSTEM-CONFIG] Maintenance mode OFF — auto-completed unscheduled windows');
+    }
+
     return saved;
   }
 

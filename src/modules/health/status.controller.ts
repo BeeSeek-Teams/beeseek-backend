@@ -1,12 +1,14 @@
-import { Controller, Get, Post, Delete, Body, Param, Header, Res, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Header, Res, Query, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
 import { IncidentsService } from '../incidents/incidents.service';
 import { PulseMetricsService } from './pulse-metrics.service';
 import { PulseLogBufferService } from './pulse-log-buffer.service';
-import { MaintenanceWindow } from '../../entities/maintenance-window.entity';
+import { MaintenanceWindow, MaintenanceStatus } from '../../entities/maintenance-window.entity';
 import { StatusSubscriber } from '../../entities/status-subscriber.entity';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { AdminGuard } from '../../common/guards/admin.guard';
 import { v4 as uuidv4 } from 'uuid';
 
 @Controller('status')
@@ -147,6 +149,61 @@ export class StatusEventsController {
       order: { scheduledStart: 'ASC' },
       where: { scheduledStart: MoreThan(new Date(Date.now() - 30 * 86_400_000)) },
     });
+  }
+
+  @Post('maintenance')
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  async createMaintenance(@Body() body: {
+    title: string;
+    description: string;
+    scheduledStart: string;
+    scheduledEnd: string;
+    affectedServices?: string;
+  }) {
+    const window = this.maintenanceRepo.create({
+      title: body.title,
+      description: body.description,
+      scheduledStart: new Date(body.scheduledStart),
+      scheduledEnd: new Date(body.scheduledEnd),
+      affectedServices: body.affectedServices || undefined,
+      status: MaintenanceStatus.SCHEDULED,
+    });
+    return this.maintenanceRepo.save(window);
+  }
+
+  @Patch('maintenance/:id')
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  async updateMaintenance(
+    @Param('id') id: string,
+    @Body() body: {
+      title?: string;
+      description?: string;
+      scheduledStart?: string;
+      scheduledEnd?: string;
+      affectedServices?: string;
+      status?: MaintenanceStatus;
+    },
+  ) {
+    const window = await this.maintenanceRepo.findOne({ where: { id } });
+    if (!window) return { ok: false, message: 'Maintenance window not found' };
+
+    if (body.title !== undefined) window.title = body.title;
+    if (body.description !== undefined) window.description = body.description;
+    if (body.scheduledStart !== undefined) window.scheduledStart = new Date(body.scheduledStart);
+    if (body.scheduledEnd !== undefined) window.scheduledEnd = new Date(body.scheduledEnd);
+    if (body.affectedServices !== undefined) window.affectedServices = body.affectedServices;
+    if (body.status !== undefined) window.status = body.status;
+
+    return this.maintenanceRepo.save(window);
+  }
+
+  @Delete('maintenance/:id')
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  async deleteMaintenance(@Param('id') id: string) {
+    const window = await this.maintenanceRepo.findOne({ where: { id } });
+    if (!window) return { ok: false, message: 'Maintenance window not found' };
+    await this.maintenanceRepo.remove(window);
+    return { ok: true, message: 'Maintenance window deleted' };
   }
 
   // ─── Subscriber management ────────────────────────────────────
