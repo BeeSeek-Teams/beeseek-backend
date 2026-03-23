@@ -340,11 +340,11 @@ export class BeesService {
 
     // 1. Reconcile totalHires (contracts that were paid = actual hires)
     await this.dataSource.query(`
-      UPDATE "bee" b
+      UPDATE "bees" b
       SET "totalHires" = COALESCE(sub.hire_count, 0)
       FROM (
         SELECT "beeId", COUNT(*) AS hire_count
-        FROM "contract"
+        FROM "contracts"
         WHERE "status" IN ('PAID', 'IN_PROGRESS', 'COMPLETED')
         GROUP BY "beeId"
       ) sub
@@ -353,11 +353,11 @@ export class BeesService {
 
     // 2. Reconcile jobsCompleted
     await this.dataSource.query(`
-      UPDATE "bee" b
+      UPDATE "bees" b
       SET "jobsCompleted" = COALESCE(sub.completed_count, 0)
       FROM (
         SELECT "beeId", COUNT(*) AS completed_count
-        FROM "contract"
+        FROM "contracts"
         WHERE "status" = 'COMPLETED'
         GROUP BY "beeId"
       ) sub
@@ -366,11 +366,11 @@ export class BeesService {
 
     // 3. Reconcile totalRevenue (workmanshipCost - commissionAmount for completed contracts)
     await this.dataSource.query(`
-      UPDATE "bee" b
+      UPDATE "bees" b
       SET "totalRevenue" = COALESCE(sub.total_revenue, 0)
       FROM (
         SELECT "beeId", SUM("workmanshipCost" - "commissionAmount") AS total_revenue
-        FROM "contract"
+        FROM "contracts"
         WHERE "status" = 'COMPLETED'
         GROUP BY "beeId"
       ) sub
