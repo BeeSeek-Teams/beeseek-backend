@@ -142,4 +142,11 @@ export class BeesController {
   adminToggleActive(@Param('id') id: string) {
     return this.beesService.adminToggleActive(id);
   }
+
+  @Post('admin/reconcile-metrics')
+  @UseGuards(AdminGuard)
+  @Roles(AdminRole.ADMIN, AdminRole.SUPER_ADMIN)
+  reconcileMetrics() {
+    return this.beesService.reconcileMetrics();
+  }
 }

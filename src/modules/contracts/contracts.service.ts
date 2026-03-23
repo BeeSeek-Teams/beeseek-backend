@@ -503,6 +503,9 @@ export class ContractsService {
         });
       }
 
+      // 8b. Increment bee totalHires
+      await manager.increment(Bee, { id: contract.beeId }, 'totalHires', 1);
+
       // === EXECUTE ALL WRITES IN PARALLEL (single round-trip each) ===
       const [, , , savedJob] = await Promise.all([
         manager.save(client),

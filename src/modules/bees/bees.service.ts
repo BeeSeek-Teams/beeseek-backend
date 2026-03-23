@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Bee } from '../../entities/bee.entity';
 import { CreateBeeDto } from './dto/create-bee.dto';
 import { User, UserStatus } from '../../entities/user.entity';
@@ -12,6 +12,7 @@ export class BeesService {
   constructor(
     @InjectRepository(Bee)
     private beesRepository: Repository<Bee>,
+    private dataSource: DataSource,
   ) {}
 
   /** Build a GeoJSON Point that PostGIS geography columns understand */
@@ -328,5 +329,56 @@ export class BeesService {
       page,
       lastPage: Math.ceil(total / limit),
     };
+  }
+
+  /**
+   * Reconcile bee metrics from actual contract data.
+   * Recalculates totalHires, jobsCompleted, and totalRevenue from source of truth.
+   */
+  async reconcileMetrics(): Promise<{ updated: number }> {
+    this.logger.log('Starting bee metrics reconciliation...');
+
+    // 1. Reconcile totalHires (contracts that were paid = actual hires)
+    await this.dataSource.query(`
+      UPDATE "bee" b
+      SET "totalHires" = COALESCE(sub.hire_count, 0)
+      FROM (
+        SELECT "beeId", COUNT(*) AS hire_count
+        FROM "contract"
+        WHERE "status" IN ('PAID', 'IN_PROGRESS', 'COMPLETED')
+        GROUP BY "beeId"
+      ) sub
+      WHERE b.id = sub."beeId"
+    `);
+
+    // 2. Reconcile jobsCompleted
+    await this.dataSource.query(`
+      UPDATE "bee" b
+      SET "jobsCompleted" = COALESCE(sub.completed_count, 0)
+      FROM (
+        SELECT "beeId", COUNT(*) AS completed_count
+        FROM "contract"
+        WHERE "status" = 'COMPLETED'
+        GROUP BY "beeId"
+      ) sub
+      WHERE b.id = sub."beeId"
+    `);
+
+    // 3. Reconcile totalRevenue (workmanshipCost - commissionAmount for completed contracts)
+    await this.dataSource.query(`
+      UPDATE "bee" b
+      SET "totalRevenue" = COALESCE(sub.total_revenue, 0)
+      FROM (
+        SELECT "beeId", SUM("workmanshipCost" - "commissionAmount") AS total_revenue
+        FROM "contract"
+        WHERE "status" = 'COMPLETED'
+        GROUP BY "beeId"
+      ) sub
+      WHERE b.id = sub."beeId"
+    `);
+
+    const updated = await this.beesRepository.count();
+    this.logger.log(`Bee metrics reconciliation complete. ${updated} bees in system.`);
+    return { updated };
   }
 }
